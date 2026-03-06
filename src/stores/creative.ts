@@ -231,8 +231,16 @@ export const useCreativeStore = defineStore('creative', () => {
     const did = extractDraftId(text)
     if (tids.length > 0) videoTaskIds.value = tids
     if (did) videoDraftId.value = did
-    for (const tid of tids) {
-      startVideoPolling(tid)
+
+    if (tids.length > 0) {
+      for (const tid of tids) {
+        startVideoPolling(tid)
+      }
+    } else {
+      // 没提取到 task_id，直接触发完成回调跳转
+      if (_onAllVideosDone) {
+        _onAllVideosDone()
+      }
     }
   }
 

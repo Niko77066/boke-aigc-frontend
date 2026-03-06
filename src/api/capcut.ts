@@ -175,14 +175,30 @@ export function extractAllTaskIds(text: string): string[] {
   const patterns = [
     /task_id["\s]*[:=]\s*["']?([a-zA-Z0-9_-]+)["']?/gi,
     /任务ID[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/g,
+    /任务编号[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/g,
+    /渲染任务[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/g,
     /render.*?id["\s]*[:=]\s*["']?([a-zA-Z0-9_-]+)["']?/gi,
+    /\*\*task_id\*\*[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/gi,
+    /`task_id`[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/gi,
   ]
 
   const seen = new Set<string>()
   for (const p of patterns) {
     for (const m of text.matchAll(p)) {
-      if (m[1]) seen.add(m[1])
+      if (m[1] && m[1].length >= 4) seen.add(m[1])
     }
+  }
+  return [...seen]
+}
+
+/**
+ * Extract video URLs directly from pipeline output text.
+ */
+export function extractVideoUrls(text: string): string[] {
+  const pattern = /https?:\/\/[^\s"'<>]+\.(?:mp4|mov|webm|avi)(?:\?[^\s"'<>]*)?/gi
+  const seen = new Set<string>()
+  for (const m of text.matchAll(pattern)) {
+    seen.add(m[0])
   }
   return [...seen]
 }

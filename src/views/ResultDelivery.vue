@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCreativeStore } from '@/stores/creative'
 import { useWorkflowStore } from '@/stores/workflow'
-import { getDraftTracks, type DraftInfo } from '@/api/capcut'
+import { getDraftTracks, extractVideoUrls, type DraftInfo } from '@/api/capcut'
 import {
   Film, Download, ExternalLink, Video, RotateCw, CheckCircle2,
   AlertTriangle, Layers, Clock, Loader2,
@@ -18,7 +18,25 @@ const workflowStore = useWorkflowStore()
 const videoStatuses = computed(() => creativeStore.videoStatusList)
 const successVideos = computed(() => videoStatuses.value.filter((s) => s.status === 'success'))
 const failedVideos = computed(() => videoStatuses.value.filter((s) => s.status === 'failed'))
-const hasVideos = computed(() => successVideos.value.length > 0)
+
+// ── Fallback: extract video URLs directly from pipeline output ──
+const fallbackVideoUrls = computed(() => {
+  if (successVideos.value.length > 0) return []
+  return extractVideoUrls(creativeStore.pipelineOutput)
+})
+
+const hasVideos = computed(() => successVideos.value.length > 0 || fallbackVideoUrls.value.length > 0)
+
+// ── Manual task_id input ─────────────────────────────────────────
+const manualTaskId = ref('')
+
+function handleManualTrack() {
+  const tid = manualTaskId.value.trim()
+  if (tid) {
+    creativeStore.trackVideoTask(tid)
+    manualTaskId.value = ''
+  }
+}
 
 // ── Draft info ───────────────────────────────────────────────────
 const draftInfo = ref<DraftInfo | null>(null)
@@ -187,8 +205,57 @@ onMounted(() => {
         <div v-else class="text-sm text-gray-400">暂无草稿详情</div>
       </div>
 
+      <!-- Fallback: videos extracted from output text -->
+      <div v-if="!successVideos.length && fallbackVideoUrls.length > 0" class="video-grid">
+        <div class="flex items-center gap-2 mb-4">
+          <Film :size="20" class="text-purple-500" />
+          <h3 class="text-lg font-semibold text-gray-900">AI 产线成片</h3>
+          <span class="text-xs bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-medium ml-auto">
+            从输出中提取
+          </span>
+        </div>
+        <div class="grid gap-6" :class="fallbackVideoUrls.length >= 2 ? 'grid-cols-2' : 'grid-cols-1 max-w-2xl'">
+          <div v-for="(url, idx) in fallbackVideoUrls" :key="url" class="video-card">
+            <div class="video-label">
+              <span class="text-xs font-bold text-purple-600">视频 {{ idx + 1 }}</span>
+            </div>
+            <video :src="url" controls class="w-full rounded-xl bg-black aspect-video" />
+            <div class="video-actions mt-3 flex gap-2">
+              <a :href="url" target="_blank" download class="action-btn primary">
+                <Download :size="14" /> 下载成片
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Manual task_id query -->
+      <div v-if="!hasVideos" class="manual-query mt-6 p-4 rounded-xl border border-gray-200 bg-gray-50/50">
+        <div class="text-sm font-medium text-gray-700 mb-2">手动查询渲染任务</div>
+        <div class="flex gap-2">
+          <input
+            v-model="manualTaskId"
+            class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-purple-300 focus:outline-none"
+            placeholder="输入 task_id..."
+          />
+          <button
+            class="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200 transition font-medium"
+            :disabled="!manualTaskId.trim()"
+            @click="handleManualTrack"
+          >
+            查询
+          </button>
+        </div>
+      </div>
+
+      <!-- Pipeline output text (when no videos found) -->
+      <div v-if="!hasVideos && creativeStore.pipelineOutput" class="pipeline-output mt-4 p-4 rounded-xl border border-gray-200 bg-white">
+        <div class="text-sm font-medium text-gray-700 mb-2">Pipeline 输出内容</div>
+        <pre class="text-xs text-gray-600 whitespace-pre-wrap max-h-60 overflow-y-auto">{{ creativeStore.pipelineOutput }}</pre>
+      </div>
+
       <!-- No results -->
-      <div v-if="!hasVideos && failedVideos.length === 0" class="empty-results">
+      <div v-if="!hasVideos && failedVideos.length === 0 && !creativeStore.pipelineOutput" class="empty-results">
         <Video :size="64" class="text-gray-300" />
         <h2 class="text-xl font-semibold text-gray-700 mt-4">暂无渲染结果</h2>
         <p class="text-gray-500 mt-2 mb-4">请先完成创意生成与视频制作</p>
