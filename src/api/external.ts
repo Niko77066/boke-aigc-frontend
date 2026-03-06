@@ -3,7 +3,7 @@
  * 基础地址通过 VITE_API_BASE_URL 配置，默认 http://localhost:8060
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8060'
+const BASE_URL: string = import.meta.env.VITE_API_BASE_URL || ''
 
 /** 上传视频响应 */
 export interface UploadVideoResponse {
@@ -78,22 +78,30 @@ export async function getUploadStatus(folderId: number): Promise<UploadStatusRes
 export function pollUploadStatus(
   folderId: number,
   onUpdate: (status: UploadStatusResponse) => void,
+  onError?: (err: Error) => void,
   intervalMs = 5000,
+  maxRetries = 60,
 ): { stop: () => void } {
   let timer: ReturnType<typeof setInterval> | null = null
   let stopped = false
+  let failCount = 0
 
   async function tick() {
     if (stopped) return
     try {
       const status = await getUploadStatus(folderId)
+      failCount = 0
       onUpdate(status)
       if (status.state !== 'processing') {
         stop()
       }
     } catch (err) {
-      console.error('[pollUploadStatus] error:', err)
-      // 继续轮询，不因单次失败停止
+      failCount++
+      if (failCount >= maxRetries) {
+        const error = new Error(`轮询超时: 连续 ${failCount} 次失败`)
+        onError?.(error)
+        stop()
+      }
     }
   }
 

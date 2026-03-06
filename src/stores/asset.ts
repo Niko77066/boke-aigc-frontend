@@ -125,7 +125,11 @@ export const useAssetStore = defineStore('asset', () => {
       total.value = assets.value.length
 
       // 启动轮询
-      pollStopper = externalApi.pollUploadStatus(res.folder_id, handleStatusUpdate)
+      pollStopper = externalApi.pollUploadStatus(
+        res.folder_id,
+        handleStatusUpdate,
+        handlePollError,
+      )
     } catch (err) {
       uploading.value = false
       uploadState.value = 'error'
@@ -139,12 +143,12 @@ export const useAssetStore = defineStore('asset', () => {
     processedCount.value = status.completed + status.failed
     totalVideoCount.value = status.total
 
-    // 更新本地 asset 状态
-    status.videos.forEach((v) => {
-      const localAsset = assets.value.find(
-        (a) => a.name === v.file_name && a.id.startsWith('ext_'),
-      )
+    // 用 folder_id + index 匹配，避免 duplicate filename 问题
+    status.videos.forEach((v, idx) => {
+      const localId = `ext_${activeFolderId.value}_${idx}`
+      const localAsset = assets.value.find((a) => a.id === localId)
       if (localAsset) {
+        localAsset.name = v.file_name
         localAsset.status = v.state === 'completed' ? 'completed' : v.state === 'failed' ? 'failed' : 'processing'
         if (v.media_id) {
           localAsset.kb_id = v.media_id
@@ -157,6 +161,12 @@ export const useAssetStore = defineStore('asset', () => {
       uploadState.value = status.state
       stopPolling()
     }
+  }
+
+  function handlePollError(err: Error) {
+    uploadState.value = 'error'
+    uploadError.value = err.message
+    stopPolling()
   }
 
   function stopPolling() {
