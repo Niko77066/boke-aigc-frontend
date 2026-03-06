@@ -17,26 +17,25 @@ import {
 import { KB_ID } from '@/utils/constants'
 
 export const useCreativeStore = defineStore('creative', () => {
-  // ── Existing mock-mode state ──────────────────────────────────
+  // ── Form / config state ─────────────────────────────────────────
   const taskConfig = ref<TaskConfig | null>(null)
+
+  // ── Pipeline state ──────────────────────────────────────────────
+  const pipelineMode = ref<PipelineMode>('文案')
+  const pipelineRunning = ref(false)
+  const pipelineOutput = ref('')
+  const pipelineChatId = ref<string | undefined>(undefined)
+  const pipelineError = ref<string | null>(null)
+  const pipelineVideoStarted = ref(false)
+
+  // ── Script selection (parsed from pipeline output) ──────────────
   const scripts = ref<Script[]>([])
   const selectedScript = ref<Script | null>(null)
   const generating = ref(false)
   const generationProgress = ref(0)
   const error = ref<string | null>(null)
 
-  // ── Pipeline state ────────────────────────────────────────────
-  const pipelineMode = ref<PipelineMode>('文案')
-  const pipelineRunning = ref(false)
-  const pipelineOutput = ref('')
-  const pipelineChatId = ref<string | undefined>(undefined)
-  const pipelineVoice = ref<VoiceOption>('活力男声')
-  const pipelineSubtitle = ref<SubtitleOption>('大字报')
-  const pipelineScript = ref('')      // selected copy text for video mode
-  const pipelineError = ref<string | null>(null)
-  const pipelineVideoStarted = ref(false)
-
-  // ── Video render tracking (CapCut MCP) ────────────────────────
+  // ── Video render tracking (CapCut MCP) ──────────────────────────
   const videoTaskId = ref<string | null>(null)
   const videoDraftId = ref<string | null>(null)
   const videoRenderStatus = ref<VideoTaskStatus | null>(null)
@@ -44,7 +43,7 @@ export const useCreativeStore = defineStore('creative', () => {
 
   let abortController: AbortController | null = null
 
-  // ── Existing mock actions (unchanged) ─────────────────────────
+  // ── Config helpers ──────────────────────────────────────────────
   function updateTaskConfig(config: Partial<TaskConfig>) {
     if (taskConfig.value) {
       taskConfig.value = { ...taskConfig.value, ...config }
@@ -58,6 +57,15 @@ export const useCreativeStore = defineStore('creative', () => {
     }
   }
 
+  /** Helper: get voice/subtitle from current taskConfig */
+  function getVoice(): VoiceOption {
+    return (taskConfig.value?.voice as VoiceOption) || '活力男声'
+  }
+  function getSubtitle(): SubtitleOption {
+    return (taskConfig.value?.subtitle as SubtitleOption) || '大字报'
+  }
+
+  // ── Legacy mock actions (kept for compatibility) ────────────────
   async function generateScripts() {
     if (!taskConfig.value) return
     generating.value = true
@@ -115,7 +123,7 @@ export const useCreativeStore = defineStore('creative', () => {
     error.value = null
   }
 
-  // ── Pipeline actions ──────────────────────────────────────────
+  // ── Pipeline actions ────────────────────────────────────────────
 
   /** Generate copy (mode=文案) via FastGPT streaming */
   async function generateCopy(msg: string) {
@@ -132,8 +140,8 @@ export const useCreativeStore = defineStore('creative', () => {
       {
         variables: {
           mode: '文案',
-          voice: pipelineVoice.value,
-          text: pipelineSubtitle.value,
+          voice: getVoice(),
+          text: getSubtitle(),
         },
         userMessage: msg,
         chatId: pipelineChatId.value,
@@ -161,7 +169,6 @@ export const useCreativeStore = defineStore('creative', () => {
     pipelineRunning.value = true
     pipelineOutput.value = ''
     pipelineError.value = null
-    pipelineScript.value = script
     pipelineVideoStarted.value = true
 
     abortController = new AbortController()
@@ -171,8 +178,8 @@ export const useCreativeStore = defineStore('creative', () => {
         variables: {
           mode: '视频',
           copy: script,
-          voice: pipelineVoice.value,
-          text: pipelineSubtitle.value,
+          voice: getVoice(),
+          text: getSubtitle(),
         },
         userMessage: msg || '请根据这份文案为我制作营销视频',
         chatId: pipelineChatId.value,
@@ -186,42 +193,6 @@ export const useCreativeStore = defineStore('creative', () => {
         pipelineRunning.value = false
         // Auto-detect task_id/draft_id and start render polling
         autoDetectAndPoll(fullText)
-      },
-      (err) => {
-        pipelineError.value = err.message
-        pipelineRunning.value = false
-      },
-      abortController.signal,
-    )
-  }
-
-  /** Follow-up message in the same conversation */
-  async function sendFollowUp(msg: string) {
-    abortPipeline()
-    pipelineRunning.value = true
-    pipelineOutput.value = ''
-    pipelineError.value = null
-
-    abortController = new AbortController()
-
-    await callPipelineStream(
-      {
-        variables: {
-          mode: pipelineMode.value,
-          copy: pipelineMode.value === '视频' ? pipelineScript.value : undefined,
-          voice: pipelineVoice.value,
-          text: pipelineSubtitle.value,
-        },
-        userMessage: msg,
-        chatId: pipelineChatId.value,
-      },
-      (delta) => {
-        pipelineOutput.value += delta
-      },
-      (fullText, chatId) => {
-        pipelineOutput.value = fullText
-        if (chatId) pipelineChatId.value = chatId
-        pipelineRunning.value = false
       },
       (err) => {
         pipelineError.value = err.message
@@ -246,7 +217,6 @@ export const useCreativeStore = defineStore('creative', () => {
     pipelineMode.value = '文案'
     pipelineOutput.value = ''
     pipelineChatId.value = undefined
-    pipelineScript.value = ''
     pipelineError.value = null
     pipelineVideoStarted.value = false
     videoTaskId.value = null
@@ -292,21 +262,22 @@ export const useCreativeStore = defineStore('creative', () => {
     }
   }
 
-  /** Manually set a task_id and start polling (for copy-paste or manual entry) */
+  /** Manually set a task_id and start polling */
   function trackVideoTask(taskId: string) {
     videoTaskId.value = taskId
     startVideoPolling(taskId)
   }
 
   return {
-    // mock state
+    // config
     taskConfig,
+    updateTaskConfig,
+    // legacy mock state (kept for CreativeOutput compatibility)
     scripts,
     selectedScript,
     generating,
     generationProgress,
     error,
-    updateTaskConfig,
     generateScripts,
     selectScript,
     updateScript,
@@ -316,14 +287,10 @@ export const useCreativeStore = defineStore('creative', () => {
     pipelineRunning,
     pipelineOutput,
     pipelineChatId,
-    pipelineVoice,
-    pipelineSubtitle,
-    pipelineScript,
     pipelineError,
     pipelineVideoStarted,
     generateCopy,
     generateVideo,
-    sendFollowUp,
     abortPipeline,
     resetPipeline,
     // video render tracking

@@ -2,11 +2,13 @@
 import { reactive, computed } from 'vue'
 import type { TaskConfig } from '@/types'
 import { AUDIENCES, KB_ID } from '@/utils/constants'
+import { VOICE_OPTIONS, SUBTITLE_OPTIONS } from '@/api/pipeline'
 import TagInput from '@/components/common/TagInput.vue'
-import { Wand2 } from 'lucide-vue-next'
+import { Wand2, Mic, Type } from 'lucide-vue-next'
 
 const props = defineProps<{
   config?: Partial<TaskConfig>
+  loading?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -19,9 +21,11 @@ const form = reactive<TaskConfig>({
   reference_copy: props.config?.reference_copy ?? '',
   brainstorm_keywords: props.config?.brainstorm_keywords ?? [],
   kb_id: props.config?.kb_id ?? KB_ID,
+  voice: props.config?.voice ?? '活力男声',
+  subtitle: props.config?.subtitle ?? '大字报',
 })
 
-const canSubmit = computed(() => form.brainstorm_keywords.length > 0)
+const canSubmit = computed(() => form.brainstorm_keywords.length > 0 && !props.loading)
 
 function handleAudienceChange(val: string) {
   form.audience = val as TaskConfig['audience']
@@ -31,6 +35,16 @@ function handleAudienceChange(val: string) {
 function handleKeywordsUpdate(tags: string[]) {
   form.brainstorm_keywords = tags
   emit('change', { brainstorm_keywords: tags })
+}
+
+function handleVoiceChange(val: string) {
+  form.voice = val
+  emit('change', { voice: val })
+}
+
+function handleSubtitleChange(val: string) {
+  form.subtitle = val
+  emit('change', { subtitle: val })
 }
 
 function handleSubmit() {
@@ -92,16 +106,55 @@ function handleSubmit() {
       </div>
     </div>
 
+    <!-- Voice selector -->
+    <div class="form-section">
+      <label class="form-label">
+        <Mic :size="13" class="inline-icon" />
+        配音风格
+      </label>
+      <div class="option-grid">
+        <div
+          v-for="v in VOICE_OPTIONS"
+          :key="v.value"
+          class="option-card"
+          :class="{ 'selected-card': form.voice === v.value }"
+          @click="handleVoiceChange(v.value)"
+        >
+          <span class="option-label">{{ v.label }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Subtitle selector -->
+    <div class="form-section">
+      <label class="form-label">
+        <Type :size="13" class="inline-icon" />
+        字幕样式
+      </label>
+      <div class="option-grid option-grid-3">
+        <div
+          v-for="s in SUBTITLE_OPTIONS"
+          :key="s.value"
+          class="option-card"
+          :class="{ 'selected-card': form.subtitle === s.value }"
+          @click="handleSubtitleChange(s.value)"
+        >
+          <span class="option-label">{{ s.label }}</span>
+        </div>
+      </div>
+    </div>
+
     <div class="form-action">
       <el-button
         type="primary"
         size="large"
         :disabled="!canSubmit"
+        :loading="loading"
         class="generate-btn"
         @click="handleSubmit"
       >
-        <Wand2 :size="16" class="mr-1" />
-        AI 生成创意文案
+        <Wand2 v-if="!loading" :size="16" class="mr-1" />
+        {{ loading ? 'AI 生成中...' : 'AI 生成创意文案' }}
       </el-button>
     </div>
   </div>
@@ -124,6 +177,13 @@ function handleSubmit() {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.inline-icon {
+  color: var(--brand-primary);
+  flex-shrink: 0;
 }
 .optional {
   font-weight: 400;
@@ -171,6 +231,41 @@ function handleSubmit() {
   font-size: 11px;
   color: var(--text-secondary);
   line-height: 1.4;
+}
+
+/* ── Option cards (voice / subtitle) ──────────── */
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.option-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.option-card {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+.option-card:hover {
+  border-color: var(--brand-primary);
+  background: rgba(124, 92, 252, 0.04);
+}
+.option-card.selected-card {
+  border-color: var(--brand-primary);
+  background: rgba(124, 92, 252, 0.08);
+  box-shadow: var(--shadow-focus);
+}
+
+.option-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .preset-tags {

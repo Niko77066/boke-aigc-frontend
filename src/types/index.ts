@@ -76,6 +76,8 @@ export interface TaskConfig {
   reference_copy?: string // 参考文案
   brainstorm_keywords: string[] // 脑暴卖点
   kb_id: string
+  voice?: string   // 配音风格 (Pipeline variable)
+  subtitle?: string // 字幕样式 (Pipeline variable)
 }
 
 export interface Script {
