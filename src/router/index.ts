@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useWorkflowStore } from '@/stores/workflow'
+import { ElMessage } from 'element-plus'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -44,7 +46,22 @@ router.beforeEach((to, _from, next) => {
   if (to.meta.title) {
     document.title = `${to.meta.title as string} - 波克城市 AIGC 工作台`
   }
-  next()
+
+  const step = to.meta.step as number | undefined
+  if (!step) {
+    // No step restriction (e.g. /assets, /)
+    next()
+    return
+  }
+
+  const workflowStore = useWorkflowStore()
+  if (workflowStore.canAccessStep(step)) {
+    next()
+  } else {
+    const nearest = workflowStore.getNearestAccessibleStep()
+    ElMessage.warning('请先完成当前步骤后再进入下一步')
+    next(nearest)
+  }
 })
 
 export default router

@@ -1,19 +1,23 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCreativeStore } from '@/stores/creative'
 import { useWorkflowStore } from '@/stores/workflow'
 import TaskConfigForm from '@/components/creative/TaskConfigForm.vue'
 import CreativeOutput from '@/components/creative/CreativeOutput.vue'
+import ScriptEditor from '@/components/creative/ScriptEditor.vue'
 import type { TaskConfig, Script } from '@/types'
 import { ElMessage } from 'element-plus'
-import { Setting, Document, Check, ArrowRight } from '@element-plus/icons-vue'
+import { Setting, Document, Check, ArrowRight, Edit, Close } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const creativeStore = useCreativeStore()
 const workflowStore = useWorkflowStore()
 
 const canProceed = computed(() => creativeStore.selectedScript !== null)
+
+const editingScript = ref(false)
+const editingTtsText = ref('')
 
 async function handleSubmit(config: TaskConfig) {
   creativeStore.updateTaskConfig(config)
@@ -34,7 +38,23 @@ function handleSelectScript(scriptId: string) {
 }
 
 function handleEditScript() {
-  ElMessage.info('编辑功能将在下一版本开放')
+  if (!creativeStore.selectedScript) return
+  editingTtsText.value = creativeStore.selectedScript.tts_text
+  editingScript.value = true
+}
+
+function handleSaveEdit() {
+  if (!creativeStore.selectedScript) return
+  creativeStore.updateScript({
+    ...creativeStore.selectedScript,
+    tts_text: editingTtsText.value,
+  })
+  editingScript.value = false
+  ElMessage.success('文案已更新')
+}
+
+function handleCancelEdit() {
+  editingScript.value = false
 }
 
 function goToConfig() {
@@ -89,6 +109,28 @@ function goToConfig() {
             @edit="handleEditScript"
           />
         </div>
+      </div>
+    </div>
+
+    <!-- Script Editor Panel -->
+    <div v-if="editingScript" class="editor-panel glass-morphism flex flex-col rounded-xl overflow-hidden">
+      <div class="panel-header">
+        <el-icon :size="16"><Edit /></el-icon>
+        <span class="font-semibold">编辑文案 — {{ creativeStore.selectedScript?.title }}</span>
+        <div class="flex items-center gap-2 ml-auto">
+          <el-button size="small" @click="handleCancelEdit">
+            <el-icon class="mr-1"><Close /></el-icon>取消
+          </el-button>
+          <el-button type="primary" size="small" @click="handleSaveEdit">
+            <el-icon class="mr-1"><Check /></el-icon>保存
+          </el-button>
+        </div>
+      </div>
+      <div class="panel-body p-4">
+        <ScriptEditor
+          v-model="editingTtsText"
+          placeholder="编辑 TTS 播报文案..."
+        />
       </div>
     </div>
 
@@ -202,5 +244,22 @@ function goToConfig() {
   box-shadow: none;
   opacity: 0.5;
   transform: none;
+}
+
+/* Editor panel */
+.editor-panel {
+  @apply border border-purple-500/30;
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.15);
+}
+
+.editor-panel .panel-header {
+  @apply flex items-center gap-2 px-4 py-3 border-b border-white/10;
+  background: linear-gradient(90deg, rgba(168, 85, 247, 0.2) 0%, rgba(6, 182, 212, 0.08) 100%);
+  text-shadow: 0 0 8px rgba(168, 85, 247, 0.5);
+}
+
+.editor-panel .panel-header .el-icon {
+  @apply text-cyan-400;
+  filter: drop-shadow(0 0 5px rgba(6, 182, 212, 0.6));
 }
 </style>

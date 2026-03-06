@@ -21,5 +21,20 @@ export default defineConfig({
   },
   build: {
     cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/element-plus') || id.includes('node_modules/@element-plus')) {
+            return 'vendor-element'
+          }
+          if (id.includes('node_modules/pinia') || id.includes('node_modules/vue-router')) {
+            return 'vendor-vue'
+          }
+          if (id.includes('node_modules/vue') || id.includes('node_modules/@vue')) {
+            return 'vendor-core'
+          }
+        },
+      },
+    },
   },
 })
