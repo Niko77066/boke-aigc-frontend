@@ -2,19 +2,26 @@
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRenderStore } from '@/stores/render'
+import { useCreativeStore } from '@/stores/creative'
 import { useWorkflowStore } from '@/stores/workflow'
 import VideoComparison from '@/components/result/VideoComparison.vue'
 import { ElMessage } from 'element-plus'
-import { AlertTriangle, Video, CheckCircle2, RotateCw } from 'lucide-vue-next'
+import { AlertTriangle, Video, CheckCircle2, RotateCw, Download, Film, ExternalLink } from 'lucide-vue-next'
 import confetti from 'canvas-confetti'
 
 const router = useRouter()
 const renderStore = useRenderStore()
+const creativeStore = useCreativeStore()
 const workflowStore = useWorkflowStore()
 
 const successResults = computed(() => renderStore.successfulResults)
 const failedResults = computed(() => renderStore.failedResults)
 const hasResults = computed(() => successResults.value.length > 0)
+
+// Pipeline video result
+const hasPipelineVideo = computed(() => !!creativeStore.videoRenderStatus?.video_url)
+const pipelineVideoUrl = computed(() => creativeStore.videoRenderStatus?.video_url ?? '')
+const hasAnyResult = computed(() => hasResults.value || hasPipelineVideo.value)
 
 function handleDownload(taskId: string) {
   const result = renderStore.results.find((r) => r.task_id === taskId)
@@ -32,6 +39,7 @@ function handleDownloadProject(taskId: string) {
 
 function startOver() {
   renderStore.resetRender()
+  creativeStore.resetPipeline()
   workflowStore.resetWorkflow()
   router.push('/creative')
 }
@@ -84,7 +92,45 @@ onMounted(() => {
         </span>
       </div>
 
-      <!-- Video comparison -->
+      <!-- Pipeline video result -->
+      <div v-if="hasPipelineVideo" class="pipeline-result mb-6">
+        <div class="flex items-center gap-2 mb-4">
+          <Film :size="20" class="text-purple-500" />
+          <h3 class="text-lg font-semibold text-gray-900">AI 产线成片</h3>
+        </div>
+        <div class="video-card p-4 rounded-2xl border border-purple-200 bg-white">
+          <video
+            :src="pipelineVideoUrl"
+            controls
+            class="w-full rounded-xl max-h-[480px] bg-black"
+          />
+          <div class="flex items-center justify-between mt-4">
+            <div class="text-sm text-gray-500">
+              由 AI 产线自动生成（FastGPT + 剪映 MCP）
+            </div>
+            <div class="flex gap-2">
+              <a
+                :href="pipelineVideoUrl"
+                target="_blank"
+                class="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-medium"
+              >
+                <Download :size="16" />
+                下载成片
+              </a>
+              <a
+                :href="pipelineVideoUrl"
+                target="_blank"
+                class="inline-flex items-center gap-1.5 px-4 py-2 border border-gray-200 text-gray-700 rounded-lg hover:border-purple-300 hover:text-purple-600 transition text-sm"
+              >
+                <ExternalLink :size="16" />
+                新窗口打开
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Video comparison (mock mode) -->
       <div v-if="hasResults" class="flex-1">
         <VideoComparison
           :results="successResults"
@@ -94,7 +140,7 @@ onMounted(() => {
       </div>
 
       <!-- No results at all -->
-      <div v-else class="empty-results">
+      <div v-else-if="!hasAnyResult" class="empty-results">
         <Video :size="64" />
         <h2 class="text-xl font-semibold mt-4">暂无渲染结果</h2>
         <p class="text-gray-500">请先完成创意配置和视频渲染</p>
