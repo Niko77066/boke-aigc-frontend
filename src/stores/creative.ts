@@ -2,9 +2,16 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { TaskConfig, Script } from '@/types'
 import { agentApi } from '@/api'
+import {
+  callPipelineStream,
+  type PipelineMode,
+  type VoiceOption,
+  type SubtitleOption,
+} from '@/api/pipeline'
 import { KB_ID } from '@/utils/constants'
 
 export const useCreativeStore = defineStore('creative', () => {
+  // ── Existing mock-mode state ──────────────────────────────────
   const taskConfig = ref<TaskConfig | null>(null)
   const scripts = ref<Script[]>([])
   const selectedScript = ref<Script | null>(null)
@@ -12,6 +19,20 @@ export const useCreativeStore = defineStore('creative', () => {
   const generationProgress = ref(0)
   const error = ref<string | null>(null)
 
+  // ── Pipeline state ────────────────────────────────────────────
+  const pipelineMode = ref<PipelineMode>('文案')
+  const pipelineRunning = ref(false)
+  const pipelineOutput = ref('')
+  const pipelineChatId = ref<string | undefined>(undefined)
+  const pipelineVoice = ref<VoiceOption>('活力男声')
+  const pipelineSubtitle = ref<SubtitleOption>('大字报')
+  const pipelineScript = ref('')      // selected copy text for video mode
+  const pipelineError = ref<string | null>(null)
+  const pipelineVideoStarted = ref(false)
+
+  let abortController: AbortController | null = null
+
+  // ── Existing mock actions (unchanged) ─────────────────────────
   function updateTaskConfig(config: Partial<TaskConfig>) {
     if (taskConfig.value) {
       taskConfig.value = { ...taskConfig.value, ...config }
@@ -32,7 +53,6 @@ export const useCreativeStore = defineStore('creative', () => {
     error.value = null
 
     try {
-      // Simulate progress updates
       const progressTimer = setInterval(() => {
         if (generationProgress.value < 90) {
           generationProgress.value += Math.floor(Math.random() * 15) + 5
@@ -83,7 +103,142 @@ export const useCreativeStore = defineStore('creative', () => {
     error.value = null
   }
 
+  // ── Pipeline actions ──────────────────────────────────────────
+
+  /** Generate copy (mode=文案) via FastGPT streaming */
+  async function generateCopy(msg: string) {
+    abortPipeline()
+    pipelineMode.value = '文案'
+    pipelineRunning.value = true
+    pipelineOutput.value = ''
+    pipelineError.value = null
+    pipelineVideoStarted.value = false
+
+    abortController = new AbortController()
+
+    await callPipelineStream(
+      {
+        variables: {
+          mode: '文案',
+          voice: pipelineVoice.value,
+          text: pipelineSubtitle.value,
+        },
+        userMessage: msg,
+        chatId: pipelineChatId.value,
+      },
+      (delta) => {
+        pipelineOutput.value += delta
+      },
+      (fullText, chatId) => {
+        pipelineOutput.value = fullText
+        if (chatId) pipelineChatId.value = chatId
+        pipelineRunning.value = false
+      },
+      (err) => {
+        pipelineError.value = err.message
+        pipelineRunning.value = false
+      },
+      abortController.signal,
+    )
+  }
+
+  /** Generate video (mode=视频) via FastGPT streaming */
+  async function generateVideo(script: string, msg?: string) {
+    abortPipeline()
+    pipelineMode.value = '视频'
+    pipelineRunning.value = true
+    pipelineOutput.value = ''
+    pipelineError.value = null
+    pipelineScript.value = script
+    pipelineVideoStarted.value = true
+
+    abortController = new AbortController()
+
+    await callPipelineStream(
+      {
+        variables: {
+          mode: '视频',
+          copy: script,
+          voice: pipelineVoice.value,
+          text: pipelineSubtitle.value,
+        },
+        userMessage: msg || '请根据这份文案为我制作营销视频',
+        chatId: pipelineChatId.value,
+      },
+      (delta) => {
+        pipelineOutput.value += delta
+      },
+      (fullText, chatId) => {
+        pipelineOutput.value = fullText
+        if (chatId) pipelineChatId.value = chatId
+        pipelineRunning.value = false
+      },
+      (err) => {
+        pipelineError.value = err.message
+        pipelineRunning.value = false
+      },
+      abortController.signal,
+    )
+  }
+
+  /** Follow-up message in the same conversation */
+  async function sendFollowUp(msg: string) {
+    abortPipeline()
+    pipelineRunning.value = true
+    pipelineOutput.value = ''
+    pipelineError.value = null
+
+    abortController = new AbortController()
+
+    await callPipelineStream(
+      {
+        variables: {
+          mode: pipelineMode.value,
+          copy: pipelineMode.value === '视频' ? pipelineScript.value : undefined,
+          voice: pipelineVoice.value,
+          text: pipelineSubtitle.value,
+        },
+        userMessage: msg,
+        chatId: pipelineChatId.value,
+      },
+      (delta) => {
+        pipelineOutput.value += delta
+      },
+      (fullText, chatId) => {
+        pipelineOutput.value = fullText
+        if (chatId) pipelineChatId.value = chatId
+        pipelineRunning.value = false
+      },
+      (err) => {
+        pipelineError.value = err.message
+        pipelineRunning.value = false
+      },
+      abortController.signal,
+    )
+  }
+
+  /** Cancel an in-flight streaming request */
+  function abortPipeline() {
+    if (abortController) {
+      abortController.abort()
+      abortController = null
+    }
+    pipelineRunning.value = false
+  }
+
+  /** Reset pipeline state for a fresh conversation */
+  function resetPipeline() {
+    abortPipeline()
+    pipelineMode.value = '文案'
+    pipelineOutput.value = ''
+    pipelineChatId.value = undefined
+    pipelineScript.value = ''
+    pipelineError.value = null
+    pipelineVideoStarted.value = false
+  }
+
   return {
+    // mock state
     taskConfig,
     scripts,
     selectedScript,
@@ -95,5 +250,20 @@ export const useCreativeStore = defineStore('creative', () => {
     selectScript,
     updateScript,
     resetCreative,
+    // pipeline state
+    pipelineMode,
+    pipelineRunning,
+    pipelineOutput,
+    pipelineChatId,
+    pipelineVoice,
+    pipelineSubtitle,
+    pipelineScript,
+    pipelineError,
+    pipelineVideoStarted,
+    generateCopy,
+    generateVideo,
+    sendFollowUp,
+    abortPipeline,
+    resetPipeline,
   }
 })
