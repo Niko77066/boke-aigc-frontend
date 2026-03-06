@@ -124,12 +124,13 @@ export const useAssetStore = defineStore('asset', () => {
       })
       total.value = assets.value.length
 
-      // 启动轮询
-      pollStopper = externalApi.pollUploadStatus(
-        res.folder_id,
-        handleStatusUpdate,
-        handlePollError,
-      )
+      // 轮询暂时关闭 — 后端状态接口同步有延迟
+      // pollStopper = externalApi.pollUploadStatus(
+      //   res.folder_id,
+      //   handleStatusUpdate,
+      //   handlePollError,
+      // )
+      uploadState.value = 'completed'
     } catch (err) {
       uploading.value = false
       uploadState.value = 'error'
