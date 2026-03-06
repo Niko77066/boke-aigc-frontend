@@ -9,8 +9,6 @@ import {
   ArrowRight,
   Coins,
   Pencil,
-  Headphones,
-  Loader2,
   Play,
   Menu,
 } from 'lucide-vue-next'
@@ -25,9 +23,7 @@ const currentStepMeta = computed(() => route.meta.step as number | undefined)
 
 const steps = [
   { step: 1, name: '创意生成', route: '/creative', icon: Pencil },
-  { step: 2, name: '音画配置', route: '/config', icon: Headphones },
-  { step: 3, name: '渲染进行中', route: '/render', icon: Loader2 },
-  { step: 4, name: '成片交付', route: '/result', icon: Play },
+  { step: 2, name: '成片交付', route: '/result', icon: Play },
 ]
 
 function isStepActive(step: number) {

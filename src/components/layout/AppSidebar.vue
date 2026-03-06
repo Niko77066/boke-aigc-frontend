@@ -5,8 +5,6 @@ import { useUIStore } from '@/stores/ui'
 import {
   FolderOpen,
   Pencil,
-  Headphones,
-  Loader2,
   Play,
   Database,
   Workflow,
@@ -22,8 +20,6 @@ const assetItems = [
 
 const pipelineItems = [
   { path: '/creative', label: '创意生成', icon: Pencil },
-  { path: '/config', label: '音画配置', icon: Headphones },
-  { path: '/render', label: '渲染进度', icon: Loader2 },
   { path: '/result', label: '成片交付', icon: Play },
 ]
 

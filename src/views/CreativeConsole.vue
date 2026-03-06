@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, nextTick } from 'vue'
+import { computed, ref, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCreativeStore } from '@/stores/creative'
 import { useWorkflowStore } from '@/stores/workflow'
@@ -8,9 +8,8 @@ import ScriptEditor from '@/components/creative/ScriptEditor.vue'
 import type { TaskConfig } from '@/types'
 import { ElMessage } from 'element-plus'
 import {
-  Settings, FileText, Check, ArrowRight, Pencil, X,
-  Loader2, Video, Film, Download, Sparkles, StopCircle,
-  RotateCw,
+  Settings, FileText, Check, Pencil, X,
+  Loader2, Video, Sparkles, StopCircle, RotateCw,
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -22,10 +21,16 @@ const outputRef = ref<HTMLDivElement | null>(null)
 const selectedPlanIndex = ref<number | null>(null)
 const editingScript = ref(false)
 const editingTtsText = ref('')
-const manualTaskId = ref('')
+
+// ── Auto-redirect callback ───────────────────────────────────────
+onMounted(() => {
+  creativeStore.onAllVideosDone(() => {
+    workflowStore.nextStep()
+    router.push('/result')
+  })
+})
 
 // ── Step tracking ────────────────────────────────────────────────
-// step 1 = form → generateCopy, step 2 = plan selected → generateVideo
 const currentStep = computed(() => {
   if (creativeStore.pipelineVideoStarted) return 2
   if (creativeStore.pipelineOutput || creativeStore.pipelineRunning) return 1
@@ -61,31 +66,14 @@ const statusCardClass = computed(() => {
 })
 
 const statusLabel = computed(() => {
+  if (creativeStore.videoPollingCount > 0) return '视频渲染中...'
   if (creativeStore.pipelineRunning && creativeStore.pipelineMode === '视频') return '视频制作中...'
   if (creativeStore.pipelineRunning) return 'AI 文案生成中...'
   if (creativeStore.pipelineError) return '发生错误'
-  if (creativeStore.pipelineVideoStarted && !creativeStore.pipelineRunning) return '视频制作完成'
+  if (creativeStore.pipelineVideoStarted && !creativeStore.pipelineRunning) return '视频流程完成，等待渲染...'
   if (hasParsedPlans.value) return '请选择一个方案'
   if (creativeStore.pipelineOutput) return '文案生成完成'
   return '等待生成'
-})
-
-// ── Video render tracking ────────────────────────────────────────
-const renderDotClass = computed(() => {
-  const s = creativeStore.videoRenderStatus?.status
-  if (s === 'success') return 'dot-success'
-  if (s === 'failed') return 'dot-error'
-  if (s === 'processing') return 'dot-processing'
-  return 'dot-pending'
-})
-
-const renderStatusLabel = computed(() => {
-  const st = creativeStore.videoRenderStatus
-  if (!st) return '等待中'
-  if (st.status === 'success') return '渲染完成'
-  if (st.status === 'failed') return `渲染失败: ${st.error || '未知错误'}`
-  if (st.status === 'processing') return `渲染中${st.progress != null ? ` ${st.progress}%` : '...'}`
-  return `状态: ${st.status}`
 })
 
 // ── Actions ──────────────────────────────────────────────────────
@@ -94,12 +82,10 @@ function handleConfigChange(config: Partial<TaskConfig>) {
   creativeStore.updateTaskConfig(config)
 }
 
-/** Step 1: Form submit → Pipeline generateCopy */
 async function handleSubmit(config: TaskConfig) {
   creativeStore.updateTaskConfig(config)
   selectedPlanIndex.value = null
 
-  // Build userMessage from form fields
   const parts: string[] = []
   const audienceLabels: Record<string, string> = {
     premium: '大R用户（高付费玩家）',
@@ -120,7 +106,6 @@ async function handleSubmit(config: TaskConfig) {
   scrollOutput()
 }
 
-/** Step 2: Select plan → Pipeline generateVideo */
 async function handleSelectPlan(index: number) {
   selectedPlanIndex.value = index
   const planText = parsedPlans.value[index] ?? ''
@@ -137,7 +122,6 @@ function handleAbort() {
 function handleReset() {
   creativeStore.resetPipeline()
   selectedPlanIndex.value = null
-  manualTaskId.value = ''
 }
 
 function handleEditPlan() {
@@ -157,19 +141,6 @@ function handleCancelEdit() {
   editingScript.value = false
 }
 
-function handleManualTrack() {
-  const tid = manualTaskId.value.trim()
-  if (tid) {
-    creativeStore.trackVideoTask(tid)
-    manualTaskId.value = ''
-  }
-}
-
-function goToConfig() {
-  workflowStore.nextStep()
-  router.push('/config')
-}
-
 function scrollOutput() {
   nextTick(() => {
     if (outputRef.value) {
@@ -186,18 +157,17 @@ function scrollOutput() {
       <div>
         <h1 class="page-title text-2xl font-bold text-gray-900">创意控制台</h1>
         <p class="page-desc text-sm text-gray-500 mt-1">
-          配置营销目标与卖点，AI 为您生成多套创意文案方案，选择方案后自动启动视频制作
+          配置营销目标与卖点，AI 生成文案方案，选择后自动制作视频并跳转成片交付
         </p>
       </div>
-      <!-- Status pill -->
       <div class="status-pill" :class="statusCardClass">
-        <Loader2 v-if="creativeStore.pipelineRunning" :size="14" class="animate-spin" />
+        <Loader2 v-if="creativeStore.pipelineRunning || creativeStore.videoPollingCount > 0" :size="14" class="animate-spin" />
         <Sparkles v-else :size="14" />
         <span>{{ statusLabel }}</span>
       </div>
     </div>
 
-    <!-- Main layout: left config panel + right output panel -->
+    <!-- Main layout: left config + right output -->
     <div class="console-layout grid grid-cols-10 gap-6 flex-1 min-h-0">
       <!-- Left: form config -->
       <div class="config-panel glass-morphism col-span-3 flex flex-col rounded-2xl overflow-hidden">
@@ -226,7 +196,6 @@ function scrollOutput() {
             <Loader2 :size="12" class="animate-spin" />
             生成中...
           </span>
-          <!-- Abort button -->
           <button
             v-if="creativeStore.pipelineRunning"
             class="ml-auto abort-btn"
@@ -235,7 +204,6 @@ function scrollOutput() {
             <StopCircle :size="14" />
             停止
           </button>
-          <!-- Reset button -->
           <button
             v-else-if="creativeStore.pipelineOutput"
             class="ml-auto reset-btn"
@@ -252,24 +220,22 @@ function scrollOutput() {
             <Sparkles :size="48" class="text-gray-300" />
             <h3 class="text-lg font-semibold text-gray-700 mt-4">等待生成创意文案</h3>
             <p class="text-sm text-gray-400 mt-1 max-w-sm text-center">
-              配置左侧参数后点击"AI 生成创意文案"，将为您生成 4 套营销方案
+              配置左侧参数后点击"AI 生成创意文案"，AI 将为您生成方案，选择后自动制作视频
             </p>
           </div>
 
           <!-- Content area -->
           <div v-else class="output-content">
-            <!-- Error -->
             <div v-if="creativeStore.pipelineError" class="error-banner">
               <span class="text-sm">{{ creativeStore.pipelineError }}</span>
             </div>
 
-            <!-- Streaming / completed text -->
             <div v-if="creativeStore.pipelineOutput" class="output-text whitespace-pre-wrap text-sm text-gray-800 leading-relaxed">
               {{ creativeStore.pipelineOutput }}
               <span v-if="creativeStore.pipelineRunning" class="typing-cursor">▌</span>
             </div>
 
-            <!-- Plan selection cards (after copy generation completes) -->
+            <!-- Plan selection cards -->
             <div v-if="hasParsedPlans && !creativeStore.pipelineVideoStarted" class="plans-section mt-6">
               <h4 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Video :size="14" class="text-purple-500" />
@@ -289,71 +255,27 @@ function scrollOutput() {
               </div>
             </div>
 
-            <!-- Video done banner -->
+            <!-- Video streaming done + waiting for render -->
             <div v-if="creativeStore.pipelineVideoStarted && !creativeStore.pipelineRunning && !creativeStore.pipelineError" class="video-done-banner mt-4">
-              <Check :size="16" />
-              <span>视频制作流程已完成</span>
-            </div>
-
-            <!-- Video render tracking panel -->
-            <div v-if="creativeStore.videoTaskId || creativeStore.videoPolling" class="render-panel mt-4 p-4 rounded-xl border border-purple-200 bg-purple-50/50">
-              <div class="flex items-center gap-2 mb-3">
-                <Film :size="18" class="text-purple-500" />
-                <span class="font-semibold text-sm text-purple-700">视频渲染状态</span>
-                <span v-if="creativeStore.videoPolling" class="ml-auto text-xs text-purple-400 animate-pulse">轮询中...</span>
-              </div>
-
-              <div v-if="creativeStore.videoRenderStatus" class="render-status">
-                <div class="flex items-center gap-2 mb-2">
-                  <span class="status-dot" :class="renderDotClass" />
-                  <span class="text-sm font-medium">{{ renderStatusLabel }}</span>
-                </div>
-
-                <!-- Progress bar -->
-                <div v-if="creativeStore.videoRenderStatus.progress != null" class="w-full bg-gray-200 rounded-full h-2 mb-3">
-                  <div class="bg-purple-500 h-2 rounded-full transition-all duration-500" :style="{ width: `${creativeStore.videoRenderStatus.progress}%` }" />
-                </div>
-
-                <!-- Download link -->
-                <div v-if="creativeStore.videoRenderStatus.video_url" class="mt-3">
-                  <a
-                    :href="creativeStore.videoRenderStatus.video_url"
-                    target="_blank"
-                    class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-medium"
-                  >
-                    <Download :size="16" />
-                    下载成片
-                  </a>
-                </div>
-
-                <!-- Error -->
-                <div v-if="creativeStore.videoRenderStatus.error" class="mt-2 text-sm text-red-500">
-                  {{ creativeStore.videoRenderStatus.error }}
-                </div>
-              </div>
-
-              <!-- Manual task_id input -->
-              <div v-if="!creativeStore.videoPolling && !creativeStore.videoRenderStatus?.video_url" class="mt-3 flex gap-2">
-                <input
-                  v-model="manualTaskId"
-                  class="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-purple-300"
-                  placeholder="输入 task_id 手动查询..."
-                />
-                <button
-                  class="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200 transition"
-                  :disabled="!manualTaskId.trim()"
-                  @click="handleManualTrack"
-                >
-                  查询
-                </button>
-              </div>
+              <template v-if="creativeStore.videoPollingCount > 0">
+                <Loader2 :size="16" class="animate-spin" />
+                <span>视频制作完成，正在等待渲染... 渲染完成后将自动跳转到成片交付</span>
+              </template>
+              <template v-else-if="creativeStore.videoTaskIds.length === 0">
+                <Check :size="16" />
+                <span>视频制作流程完成，等待提取渲染任务 ID...</span>
+              </template>
+              <template v-else>
+                <Check :size="16" />
+                <span>所有渲染完成，正在跳转...</span>
+              </template>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Script Editor (edit selected plan before video) -->
+    <!-- Script Editor overlay -->
     <div v-if="editingScript" class="editor-panel glass-morphism flex flex-col rounded-2xl overflow-hidden">
       <div class="panel-header">
         <Pencil :size="16" class="text-purple-500" />
@@ -372,30 +294,18 @@ function scrollOutput() {
       </div>
     </div>
 
-    <!-- Bottom action bar (visible when plans are available or video done) -->
-    <div v-if="hasParsedPlans || creativeStore.pipelineVideoStarted" class="action-bar flex items-center justify-between p-4 rounded-2xl">
+    <!-- Bottom action bar -->
+    <div v-if="hasParsedPlans && !creativeStore.pipelineVideoStarted" class="action-bar flex items-center justify-between p-4 rounded-2xl">
       <div class="action-info">
-        <span v-if="selectedPlanIndex !== null && !creativeStore.pipelineVideoStarted" class="selected-info flex items-center gap-2 text-sm font-medium text-emerald-600">
+        <span v-if="selectedPlanIndex !== null" class="selected-info flex items-center gap-2 text-sm font-medium text-emerald-600">
           <Check :size="16" />
           已选择方案 {{ selectedPlanIndex + 1 }}
           <button class="text-purple-500 hover:text-purple-700 underline text-xs ml-2" @click="handleEditPlan">
             编辑文案
           </button>
         </span>
-        <span v-else-if="creativeStore.pipelineVideoStarted && !creativeStore.pipelineRunning" class="selected-info flex items-center gap-2 text-sm font-medium text-emerald-600">
-          <Check :size="16" />
-          视频制作完成
-        </span>
         <span v-else class="text-sm text-gray-500">在上方选择一个方案以启动视频制作</span>
       </div>
-      <el-button
-        v-if="creativeStore.pipelineVideoStarted && !creativeStore.pipelineRunning"
-        type="primary" size="large"
-        class="next-btn" @click="goToConfig"
-      >
-        下一步: 音画配置
-        <ArrowRight :size="16" class="ml-2" />
-      </el-button>
     </div>
   </div>
 </template>
@@ -403,7 +313,6 @@ function scrollOutput() {
 <style scoped>
 @reference "tailwindcss";
 
-/* ── Card base ────────────────────────────────────── */
 .glass-morphism {
   @apply bg-white border border-gray-200;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -415,34 +324,21 @@ function scrollOutput() {
   box-shadow: var(--shadow-md);
 }
 
-/* ── Panel header ─────────────────────────────────── */
 .panel-header {
   @apply flex items-center gap-2 px-4 py-3 border-b border-gray-100 text-gray-700;
   background: linear-gradient(135deg, #FAFAFF 0%, #F8F7F4 100%);
 }
 
-/* ── Status pill ──────────────────────────────────── */
 .status-pill {
   @apply flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold;
   transition: all 0.2s ease;
 }
-.status-pill.is-idle {
-  @apply bg-gray-100 text-gray-500;
-}
-.status-pill.is-running {
-  @apply bg-purple-100 text-purple-600;
-}
-.status-pill.is-done {
-  @apply bg-emerald-100 text-emerald-600;
-}
-.status-pill.is-video {
-  @apply bg-blue-100 text-blue-600;
-}
-.status-pill.is-error {
-  @apply bg-red-100 text-red-500;
-}
+.status-pill.is-idle { @apply bg-gray-100 text-gray-500; }
+.status-pill.is-running { @apply bg-purple-100 text-purple-600; }
+.status-pill.is-done { @apply bg-emerald-100 text-emerald-600; }
+.status-pill.is-video { @apply bg-blue-100 text-blue-600; }
+.status-pill.is-error { @apply bg-red-100 text-red-500; }
 
-/* ── Abort / Reset buttons in header ──────────────── */
 .abort-btn {
   @apply flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 transition-colors cursor-pointer;
 }
@@ -450,12 +346,10 @@ function scrollOutput() {
   @apply flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-gray-500 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer;
 }
 
-/* ── Empty state ──────────────────────────────────── */
 .empty-state {
   @apply flex flex-col items-center justify-center h-full text-center;
 }
 
-/* ── Output text ──────────────────────────────────── */
 .output-text {
   font-family: 'Inter', 'PingFang SC', system-ui, sans-serif;
 }
@@ -473,7 +367,6 @@ function scrollOutput() {
   @apply p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 mb-4;
 }
 
-/* ── Plan cards ───────────────────────────────────── */
 .plan-card {
   @apply text-left p-3 rounded-xl border border-gray-200 cursor-pointer transition-all;
   background: var(--bg-surface);
@@ -486,58 +379,18 @@ function scrollOutput() {
   @apply border-purple-500 bg-purple-50;
   box-shadow: var(--shadow-focus);
 }
-.plan-number {
-  @apply text-xs font-bold text-purple-600 mb-1;
-}
-.plan-preview {
-  @apply text-xs text-gray-600 leading-relaxed line-clamp-3;
-}
+.plan-number { @apply text-xs font-bold text-purple-600 mb-1; }
+.plan-preview { @apply text-xs text-gray-600 leading-relaxed line-clamp-3; }
 
 .video-done-banner {
   @apply flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium;
 }
 
-/* ── Render panel ─────────────────────────────────── */
-.render-panel {
-  animation: fadeIn 0.3s ease;
-}
-.status-dot {
-  @apply w-2.5 h-2.5 rounded-full;
-}
-.dot-success { @apply bg-emerald-500; }
-.dot-error { @apply bg-red-500; }
-.dot-processing { @apply bg-amber-500 animate-pulse; }
-.dot-pending { @apply bg-gray-400; }
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ── Action bar ───────────────────────────────────── */
 .action-bar {
   @apply bg-white border border-gray-200;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.next-btn {
-  @apply font-bold rounded-lg px-8 py-5 text-white relative overflow-hidden border-0;
-  background: var(--brand-primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
-}
-.next-btn:hover:not(.is-disabled) {
-  background: var(--brand-primary-dark);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-.next-btn.is-disabled {
-  @apply bg-gray-200 text-gray-400;
-  box-shadow: none;
-  opacity: 1;
-}
-
-/* ── Editor panel ─────────────────────────────────── */
 .editor-panel {
   @apply border border-purple-200;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);

@@ -160,22 +160,31 @@ export async function pollVideoTask(
 }
 
 /**
- * Extract task_id from pipeline output text.
- * The Claude agent typically outputs task_id in various formats.
+ * Extract first task_id from pipeline output text.
  */
 export function extractTaskId(text: string): string | null {
-  // Pattern: task_id: xxx or "task_id": "xxx" or task_id=xxx
+  const ids = extractAllTaskIds(text)
+  return ids.length > 0 ? ids[0]! : null
+}
+
+/**
+ * Extract ALL task_ids from pipeline output text.
+ * The workflow may produce multiple videos, each with its own task_id.
+ */
+export function extractAllTaskIds(text: string): string[] {
   const patterns = [
-    /task_id["\s]*[:=]\s*["']?([a-zA-Z0-9_-]+)["']?/i,
-    /任务ID[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/,
-    /render.*?id["\s]*[:=]\s*["']?([a-zA-Z0-9_-]+)["']?/i,
+    /task_id["\s]*[:=]\s*["']?([a-zA-Z0-9_-]+)["']?/gi,
+    /任务ID[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/g,
+    /render.*?id["\s]*[:=]\s*["']?([a-zA-Z0-9_-]+)["']?/gi,
   ]
 
+  const seen = new Set<string>()
   for (const p of patterns) {
-    const m = text.match(p)
-    if (m?.[1]) return m[1]
+    for (const m of text.matchAll(p)) {
+      if (m[1]) seen.add(m[1])
+    }
   }
-  return null
+  return [...seen]
 }
 
 /**

@@ -22,22 +22,10 @@ const router = createRouter({
       meta: { title: '创意控制台', step: 1 },
     },
     {
-      path: '/config',
-      name: 'AudioVideoConfig',
-      component: () => import('@/views/AudioVideoConfig.vue'),
-      meta: { title: '音画配置', step: 2 },
-    },
-    {
-      path: '/render',
-      name: 'RenderProgress',
-      component: () => import('@/views/RenderProgress.vue'),
-      meta: { title: '渲染进度', step: 3 },
-    },
-    {
       path: '/result',
       name: 'ResultDelivery',
       component: () => import('@/views/ResultDelivery.vue'),
-      meta: { title: '成片交付', step: 4 },
+      meta: { title: '成片交付', step: 2 },
     },
   ],
 })

@@ -3,13 +3,11 @@ import { ref, computed } from 'vue'
 import type { WizardStep, WizardStepConfig, WorkflowData, WorkflowSnapshot } from '@/types'
 import { generateId } from '@/utils/helpers'
 
-const STEP_ORDER: WizardStep[] = ['creative', 'config', 'render', 'result']
+const STEP_ORDER: WizardStep[] = ['creative', 'result']
 
 function makeStepConfigs(): WizardStepConfig[] {
   return [
-    { step: 'creative', name: '创意生成', title: '创意控制台', description: '配置目标人群与卖点，AI生成创意文案', completed: false, canAccess: true },
-    { step: 'config', name: '音画配置', title: '音画配置', description: '选择配音语音与字幕样式', completed: false, canAccess: false },
-    { step: 'render', name: '渲染进行中', title: '渲染进度', description: '视频渲染生成中', completed: false, canAccess: false },
+    { step: 'creative', name: '创意生成', title: '创意控制台', description: '配置目标人群与卖点，AI生成创意文案并自动制作视频', completed: false, canAccess: true },
     { step: 'result', name: '成片交付', title: '成片交付', description: '预览与下载最终视频', completed: false, canAccess: false },
   ]
 }
@@ -80,8 +78,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
       if (step?.canAccess) {
         const routeNames: Record<WizardStep, string> = {
           creative: 'CreativeConsole',
-          config: 'AudioVideoConfig',
-          render: 'RenderProgress',
+          config: 'CreativeConsole',
+          render: 'CreativeConsole',
           result: 'ResultDelivery',
         }
         return { name: routeNames[step.step] }
