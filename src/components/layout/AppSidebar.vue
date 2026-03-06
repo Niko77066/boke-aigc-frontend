@@ -1,40 +1,39 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUIStore } from '@/stores/ui'
 import {
-  LayoutGrid,
   FolderOpen,
   Pencil,
   Headphones,
   Loader2,
   Play,
+  Database,
+  Workflow,
 } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
 const uiStore = useUIStore()
-const activeTab = ref<'workflow' | 'assets'>('workflow')
 
-const menuItems = computed(() => {
-  if (activeTab.value === 'workflow') {
-    return [
-      { path: '/creative', label: '创意控制台', icon: Pencil },
-      { path: '/config', label: '音画配置', icon: Headphones },
-      { path: '/render', label: '渲染进度', icon: Loader2 },
-      { path: '/result', label: '成片交付', icon: Play },
-    ]
-  }
-  return [{ path: '/assets', label: '资产管理', icon: FolderOpen }]
-})
+const assetItems = [
+  { path: '/assets', label: '素材管理', icon: FolderOpen },
+]
+
+const pipelineItems = [
+  { path: '/creative', label: '创意生成', icon: Pencil },
+  { path: '/config', label: '音画配置', icon: Headphones },
+  { path: '/render', label: '渲染进度', icon: Loader2 },
+  { path: '/result', label: '成片交付', icon: Play },
+]
 
 function isActive(path: string) {
-  return route.path.startsWith(path)
+  return route.path === path || route.path.startsWith(path + '/')
 }
 
-function navigate(path:string) {
+function navigate(path: string) {
   router.push(path)
-  uiStore.toggleSidebar()
+  if (uiStore.isSidebarOpen) uiStore.toggleSidebar()
 }
 </script>
 
@@ -42,44 +41,57 @@ function navigate(path:string) {
   <div class="sidebar-container" :class="{ 'is-open': uiStore.isSidebarOpen }">
     <div class="sidebar-backdrop" @click="uiStore.toggleSidebar"></div>
     <aside class="app-sidebar flex flex-col border-r">
-      <div class="sidebar-tabs p-3">
-        <div class="flex bg-gray-100 rounded-lg p-1">
-          <button
-            class="tab-btn"
-            :class="{ 'active-tab': activeTab === 'workflow' }"
-            @click="activeTab = 'workflow'"
-          >
-            <LayoutGrid :size="14" />
-            <span>自动化产线</span>
-          </button>
-          <button
-            class="tab-btn"
-            :class="{ 'active-tab': activeTab === 'assets' }"
-            @click="activeTab = 'assets'"
-          >
-            <FolderOpen :size="14" />
-            <span>素材资产库</span>
-          </button>
+      <!-- 素材资产库 -->
+      <div class="sidebar-section">
+        <div class="section-header">
+          <Database :size="14" class="section-icon" />
+          <span>素材资产库</span>
         </div>
+        <nav class="section-menu">
+          <div
+            v-for="item in assetItems"
+            :key="item.path"
+            class="menu-item"
+            :class="{ 'active-menu-item': isActive(item.path) }"
+            @click="navigate(item.path)"
+          >
+            <div class="menu-icon">
+              <component :is="item.icon" :size="16" />
+            </div>
+            <span class="menu-label">{{ item.label }}</span>
+          </div>
+        </nav>
       </div>
 
-      <nav class="sidebar-menu flex-1 px-3 py-2 flex flex-col gap-1">
-        <div
-          v-for="item in menuItems"
-          :key="item.path"
-          class="menu-item"
-          :class="{ 'active-menu-item': isActive(item.path) }"
-          @click="navigate(item.path)"
-        >
-          <div class="menu-icon flex items-center justify-center w-7 h-7 rounded-md">
-            <component :is="item.icon" :size="16" />
-          </div>
-          <span class="menu-label text-sm font-medium">{{ item.label }}</span>
-        </div>
-      </nav>
+      <!-- 分隔线 -->
+      <div class="section-divider"></div>
 
-      <div class="sidebar-footer p-4 mt-auto">
-        <div class="version-info text-center text-xs text-gray-400">v1.0.0 Phase 1</div>
+      <!-- 自动化产线 -->
+      <div class="sidebar-section flex-1">
+        <div class="section-header">
+          <Workflow :size="14" class="section-icon" />
+          <span>自动化产线</span>
+        </div>
+        <nav class="section-menu">
+          <div
+            v-for="(item, idx) in pipelineItems"
+            :key="item.path"
+            class="menu-item"
+            :class="{ 'active-menu-item': isActive(item.path) }"
+            @click="navigate(item.path)"
+          >
+            <div class="step-indicator">
+              <span class="step-number">{{ idx + 1 }}</span>
+            </div>
+            <span class="menu-label">{{ item.label }}</span>
+            <component :is="item.icon" :size="14" class="menu-trail-icon" />
+          </div>
+        </nav>
+      </div>
+
+      <!-- 底部 -->
+      <div class="sidebar-footer">
+        <div class="version-info">AIGC Pipeline v1.0</div>
       </div>
     </aside>
   </div>
@@ -87,55 +99,112 @@ function navigate(path:string) {
 
 <style scoped>
 @reference "tailwindcss";
+
 .app-sidebar {
   grid-area: sidebar;
-  background: var(--gradient-sidebar);
+  background: var(--bg-surface);
   border-color: var(--border-color);
+  min-height: 100%;
 }
 
-.tab-btn {
-  @apply flex-1 flex items-center justify-center gap-2 px-2 py-1.5 rounded-md text-gray-500 text-xs font-semibold;
-  transition: all 0.2s ease-in-out;
-}
-.tab-btn:hover {
-  @apply bg-white text-gray-700;
-}
-.active-tab {
-  @apply bg-white text-purple-600 shadow-sm;
+/* Section */
+.sidebar-section {
+  @apply px-3 py-3;
 }
 
+.section-header {
+  @apply flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+
+.section-icon {
+  color: var(--brand-primary);
+  opacity: 0.6;
+}
+
+.section-divider {
+  @apply mx-4 my-1;
+  height: 1px;
+  background: var(--border-color);
+}
+
+.section-menu {
+  @apply flex flex-col gap-0.5;
+}
+
+/* Menu Items */
 .menu-item {
-  @apply flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-gray-500 relative overflow-hidden;
-  transition: all 0.2s ease-in-out;
-}
-.menu-item:hover {
-  @apply bg-white/60 text-gray-700;
-}
-.menu-item .menu-icon {
-  @apply bg-gray-100 text-gray-500;
-}
-.menu-item:hover .menu-icon {
-  @apply bg-purple-50 text-purple-500;
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer relative overflow-hidden;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
 }
 
+.menu-item:hover {
+  background: var(--bg-muted);
+  color: var(--text-primary);
+}
+
+.menu-icon {
+  @apply flex items-center justify-center w-7 h-7 rounded-md;
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+}
+
+.menu-item:hover .menu-icon {
+  background: rgba(124, 92, 252, 0.1);
+  color: var(--brand-primary);
+}
+
+.menu-label {
+  @apply text-sm font-medium;
+}
+
+.menu-trail-icon {
+  @apply ml-auto;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.menu-item:hover .menu-trail-icon {
+  opacity: 0.5;
+}
+
+/* Step indicator for pipeline items */
+.step-indicator {
+  @apply flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold;
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+}
+
+.menu-item:hover .step-indicator {
+  background: rgba(124, 92, 252, 0.1);
+  color: var(--brand-primary);
+}
+
+/* Active state */
 .active-menu-item {
-  @apply bg-white text-gray-900;
+  background: rgba(124, 92, 252, 0.08);
+  color: var(--text-primary);
   font-weight: 600;
-  box-shadow: var(--shadow-sm);
 }
 
 .active-menu-item::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 0;
-  bottom: 0;
+  top: 4px;
+  bottom: 4px;
   width: 3px;
   background: var(--brand-primary);
   border-radius: 0 3px 3px 0;
 }
 
-.active-menu-item .menu-icon {
+.active-menu-item .menu-icon,
+.active-menu-item .step-indicator {
   background: var(--brand-primary);
   color: white;
 }
@@ -144,6 +213,23 @@ function navigate(path:string) {
   color: var(--brand-primary);
 }
 
+.active-menu-item .menu-trail-icon {
+  opacity: 0.6;
+  color: var(--brand-primary);
+}
+
+/* Footer */
+.sidebar-footer {
+  @apply p-4 mt-auto;
+  border-top: 1px solid var(--border-color);
+}
+
+.version-info {
+  @apply text-center text-xs font-medium;
+  color: var(--text-muted);
+}
+
+/* Mobile responsive */
 @media (max-width: 767px) {
   .sidebar-container {
     position: fixed;
@@ -159,6 +245,7 @@ function navigate(path:string) {
     transition: transform 0.3s ease-in-out;
     width: 250px;
     height: 100%;
+    box-shadow: var(--shadow-xl);
   }
   .sidebar-backdrop {
     position: absolute;

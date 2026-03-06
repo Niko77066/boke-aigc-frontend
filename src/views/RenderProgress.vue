@@ -105,82 +105,112 @@ const currentTip = computed(() => LOADING_TIPS[currentTipIndex.value] ?? '')
 .render-progress {
   @apply flex items-center justify-center h-full w-full relative overflow-hidden;
   background-color: #F8F7F4;
-  background-image:
-    radial-gradient(circle at 20% 80%, rgba(124, 92, 252, 0.06), transparent 40%),
-    radial-gradient(circle at 80% 20%, rgba(124, 92, 252, 0.04), transparent 40%);
 }
 
 .loading-content, .completion-screen {
-  @apply flex flex-col items-center text-center p-10 z-10 rounded-2xl border border-gray-200 transition-all duration-500;
-  background: #ffffff;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  @apply flex flex-col items-center text-center p-10 z-10;
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
 }
+
 .loading-content:hover, .completion-screen:hover {
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  border-color: #7C5CFC;
 }
 
 .stage-label {
-  @apply text-4xl font-black tracking-widest uppercase;
-  color: #111827;
+  @apply text-2xl font-bold tracking-wide;
+  color: #1A1A2E;
 }
+
 .stage-message {
-  @apply text-lg font-medium mt-3 tracking-wide;
-  color: #6b7280;
+  @apply text-base font-medium mt-2;
+  color: #6B7280;
 }
 
 .progress-bar-container {
-  @apply relative w-full max-w-md h-5 my-10 rounded-full overflow-hidden border border-gray-200;
-  background: #f3f4f6;
-}
-.progress-bar {
-  @apply absolute top-0 left-0 h-full rounded-full transition-all duration-500 ease-out;
-  background: linear-gradient(90deg, #7C5CFC, #6C8CFF);
-}
-.progress-text {
-  @apply absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-sm font-black tracking-widest z-10;
-  color: #374151;
+  @apply relative w-full max-w-md h-4 my-8 overflow-hidden;
+  background-color: #F8F7F4;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
 }
 
-.loading-tip { @apply h-6 mt-2; }
+.progress-bar {
+  @apply absolute top-0 left-0 h-full;
+  background-color: #7C5CFC;
+  border-radius: 8px;
+  transition: width 0.2s ease;
+}
+
+.progress-text {
+  @apply absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold z-10;
+  color: #1A1A2E;
+}
+
+.loading-tip {
+  @apply h-6 mt-2;
+}
+
 .tip-text {
-  @apply text-sm font-medium tracking-wider;
-  color: #9ca3af;
+  @apply text-sm;
+  color: #9CA3AF;
 }
 
 .completion-icon {
-  color: #10b981;
+  color: #7C5CFC;
+  margin-bottom: 16px;
 }
+
 .completion-title {
-  @apply text-4xl font-black tracking-widest uppercase mt-6;
-  color: #111827;
+  @apply text-2xl font-bold;
+  color: #1A1A2E;
 }
+
 .completion-desc {
-  @apply text-lg font-medium mt-3 tracking-wide;
-  color: #6b7280;
+  @apply text-base mt-2;
+  color: #6B7280;
 }
 
 .error-overlay {
-  @apply absolute inset-0 flex flex-col items-center justify-center gap-5 text-center z-20;
-  background: rgba(255, 255, 255, 0.95);
-  color: #ef4444;
+  @apply absolute inset-0 flex flex-col items-center justify-center gap-4 text-center z-20;
+  background-color: #F8F7F4;
+  color: #FF6B6B;
 }
 
 /* Element Plus */
 :deep(.el-button--primary) {
-  @apply font-bold tracking-widest uppercase transition-all duration-300 border-0 rounded-lg px-8 py-5 mt-4;
-  background: var(--brand-primary);
-  color: #ffffff;
+  @apply font-medium px-6 py-2 mt-4 border-0;
+  background-color: #7C5CFC;
+  color: #FFFFFF;
+  border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
 }
+
 :deep(.el-button--primary:hover) {
-  background: var(--brand-primary-dark);
-  box-shadow: var(--shadow-md);
+  background-color: #6A4EE0;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
   transform: translateY(-1px);
 }
 
-.fade-enter-active, .fade-leave-active { transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
-.fade-slide-enter-active, .fade-slide-leave-active { transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
-.fade-slide-enter-from { opacity: 0; transform: translateY(20px); }
-.fade-slide-leave-to { opacity: 0; transform: translateY(-20px); }
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+
+.fade-slide-enter-active, .fade-slide-leave-active {
+  transition: all 0.2s ease;
+}
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
 </style>

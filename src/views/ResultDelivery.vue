@@ -123,45 +123,129 @@ onMounted(() => {
 <style scoped>
 @reference "tailwindcss";
 
-/* Page header */
-.page-header {
-  @apply bg-white border border-gray-200 rounded-xl p-6;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+.result-delivery {
+  background-color: #F8F7F4;
 }
 
-/* Glass morphism - clean card */
-.glass-morphism {
-  @apply bg-white border border-gray-200;
+.page-header {
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.page-title {
+  color: #1A1A2E;
+}
+
+.page-desc {
+  color: #6B7280;
+}
+
+/* Overriding the template's glass-morphism class to enforce solid Arc-style cards */
+.glass-morphism {
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .glass-morphism:hover {
-  box-shadow: var(--shadow-md);
+  border-color: #7C5CFC;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
-/* Failure notice */
 .failure-notice {
-  @apply flex items-center gap-2 p-3 mb-4 rounded-lg;
-  background-color: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #dc2626;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  background-color: #FFF5F5;
+  border: 1px solid #FFD6D6;
+  color: #FF6B6B;
+  font-size: 0.875rem;
 }
 
-/* Empty results */
 .empty-results {
-  @apply flex flex-col items-center justify-center h-full;
-  color: #9ca3af;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #9CA3AF;
 }
 
-/* Success count */
+.empty-results h2 {
+  color: #1A1A2E;
+}
+
+.empty-results p {
+  color: #6B7280;
+  margin-bottom: 1.5rem;
+}
+
 .success-count {
-  @apply flex items-center gap-2 text-sm font-medium;
-  color: #059669;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #10B981;
 }
 
-/* Action bar */
 .action-bar {
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Element Plus Overrides */
+:deep(.el-button) {
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: 1px solid #E5E7EB;
+  background-color: #FFFFFF;
+  color: #1A1A2E;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+:deep(.el-button:hover),
+:deep(.el-button:focus) {
+  color: #7C5CFC;
+  border-color: #7C5CFC;
+  background-color: #F8F7F4;
+  outline: none;
+}
+
+:deep(.el-button--primary) {
+  background-color: #7C5CFC;
+  border-color: #7C5CFC;
+  color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(124, 92, 252, 0.2);
+}
+
+:deep(.el-button--primary:hover),
+:deep(.el-button--primary:focus) {
+  background-color: #6A4EE0;
+  border-color: #6A4EE0;
+  color: #FFFFFF;
+}
+
+:deep(.el-button.is-plain) {
+  background-color: #FFFFFF;
+  border-color: #E5E7EB;
+  color: #6B7280;
+}
+
+:deep(.el-button.is-plain:hover) {
+  border-color: #7C5CFC;
+  color: #7C5CFC;
+  background-color: #FFFFFF;
 }
 </style>

@@ -178,53 +178,73 @@ function startRender() {
 
 /* Clean card base */
 .glass-morphism {
-  @apply bg-white border border-gray-200;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  @apply bg-white rounded-xl;
+  border: 1px solid #E5E7EB;
+  box-shadow: 0 2px 8px rgba(26, 26, 46, 0.04);
+  transition: all 0.2s ease-in-out;
 }
 
 .glass-morphism:hover {
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 8px 24px rgba(26, 26, 46, 0.08);
+  transform: translateY(-1px);
 }
 
 /* Script preview */
 .script-preview {
-  @apply bg-white border border-gray-200;
-  border-left: 4px solid #a78bfa;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  @apply bg-white rounded-lg p-4;
+  border: 1px solid #E5E7EB;
+  border-left: 4px solid #7C5CFC;
+  box-shadow: 0 2px 8px rgba(26, 26, 46, 0.04);
+  color: #1A1A2E;
 }
 
 /* Render button */
 .render-btn {
-  @apply font-bold rounded-lg px-6;
-  background: var(--brand-primary);
+  @apply font-medium rounded-lg px-6 py-2;
+  background-color: #7C5CFC;
+  color: #FFFFFF;
   border: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(26, 26, 46, 0.06);
+  transition: all 0.2s ease;
 }
+
 .render-btn:hover:not(.is-disabled) {
-  background: var(--brand-primary-dark);
-  box-shadow: var(--shadow-md);
+  background-color: #6A4BE3;
+  box-shadow: 0 4px 12px rgba(26, 26, 46, 0.1);
   transform: translateY(-1px);
+}
+
+.render-btn.is-disabled {
+  background-color: #E5E7EB;
+  color: #6B7280;
+  box-shadow: none;
 }
 
 /* Status badges */
 .section-status-done {
-  @apply flex items-center gap-1 text-xs font-medium bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full;
+  @apply flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full;
+  background-color: rgba(124, 92, 252, 0.1);
+  color: #7C5CFC;
 }
+
 .section-status-pending {
-  @apply text-xs text-gray-400;
+  @apply text-xs;
+  color: #6B7280;
 }
 
 /* Action bar */
 .action-bar {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  @apply bg-white border-t;
+  border-color: #E5E7EB;
+  box-shadow: 0 -4px 16px rgba(26, 26, 46, 0.04);
 }
 
 /* Page header */
 .page-header {
-  @apply bg-white border border-gray-200 rounded-xl p-6;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  @apply bg-white rounded-xl p-6;
+  border: 1px solid #E5E7EB;
+  box-shadow: 0 2px 8px rgba(26, 26, 46, 0.04);
+  color: #1A1A2E;
 }
 
 /* Scrollbar hiding */
@@ -234,5 +254,80 @@ function startRender() {
 }
 .audio-section > div::-webkit-scrollbar, .subtitle-section > div::-webkit-scrollbar {
   display: none;
+}
+
+/* Element Plus Overrides for Arc Theme */
+:deep(.el-button--primary) {
+  background-color: #7C5CFC !important;
+  border-color: #7C5CFC !important;
+  color: #FFFFFF !important;
+}
+
+:deep(.el-button--primary:hover) {
+  background-color: #6A4BE3 !important;
+  border-color: #6A4BE3 !important;
+}
+
+:deep(.el-button.is-plain) {
+  color: #1A1A2E;
+  border-color: #E5E7EB;
+  background-color: #FFFFFF;
+}
+
+:deep(.el-button.is-plain:hover) {
+  color: #7C5CFC;
+  border-color: #7C5CFC;
+  background-color: rgba(124, 92, 252, 0.05);
+}
+
+:deep(.el-card) {
+  background-color: #FFFFFF;
+  border-color: #E5E7EB;
+  box-shadow: 0 2px 8px rgba(26, 26, 46, 0.04);
+  border-radius: 0.75rem;
+  color: #1A1A2E;
+}
+
+:deep(.el-input__wrapper),
+:deep(.el-textarea__inner) {
+  box-shadow: 0 0 0 1px #E5E7EB inset !important;
+  background-color: #F8F7F4;
+  color: #1A1A2E;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+:deep(.el-input__wrapper.is-focus),
+:deep(.el-textarea__inner:focus) {
+  box-shadow: 0 0 0 1px #7C5CFC inset !important;
+  background-color: #FFFFFF;
+}
+
+:deep(.el-step__title.is-finish),
+:deep(.el-step__head.is-finish) {
+  color: #7C5CFC;
+  border-color: #7C5CFC;
+}
+
+:deep(.el-step__title.is-process) {
+  color: #1A1A2E;
+  font-weight: 600;
+}
+
+:deep(.el-step__title.is-wait) {
+  color: #6B7280;
+}
+
+:deep(.el-tabs__item) {
+  color: #6B7280;
+}
+
+:deep(.el-tabs__item.is-active) {
+  color: #7C5CFC;
+  font-weight: 600;
+}
+
+:deep(.el-tabs__active-bar) {
+  background-color: #7C5CFC;
 }
 </style>
