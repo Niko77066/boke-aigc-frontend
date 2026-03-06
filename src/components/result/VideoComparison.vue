@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { RenderResult } from '@/types'
 import VideoPlayer from './VideoPlayer.vue'
 import { formatFileSize, formatDuration } from '@/utils/helpers'
-import { Download, FolderOpened, Warning } from '@element-plus/icons-vue'
+import { Download, FolderOpen, AlertTriangle } from 'lucide-vue-next'
 
 const props = defineProps<{
   results: RenderResult[]
@@ -37,11 +37,11 @@ function typeLabel(type: RenderResult['timeline_type']): string {
         </div>
         <div class="video-actions">
           <el-button type="primary" @click="emit('download', successResults[0]!.task_id)">
-            <el-icon class="mr-1"><Download /></el-icon>
+            <Download :size="16" class="mr-1" />
             下载 MP4
           </el-button>
           <el-button @click="emit('downloadProject', successResults[0]!.task_id)">
-            <el-icon class="mr-1"><FolderOpened /></el-icon>
+            <FolderOpen :size="16" class="mr-1" />
             导出工程文件
           </el-button>
         </div>
@@ -61,11 +61,11 @@ function typeLabel(type: RenderResult['timeline_type']): string {
         </div>
         <div class="video-actions">
           <el-button type="primary" @click="emit('download', result.task_id)">
-            <el-icon class="mr-1"><Download /></el-icon>
+            <Download :size="16" class="mr-1" />
             下载 MP4
           </el-button>
           <el-button @click="emit('downloadProject', result.task_id)">
-            <el-icon class="mr-1"><FolderOpened /></el-icon>
+            <FolderOpen :size="16" class="mr-1" />
             导出工程
           </el-button>
         </div>
@@ -74,7 +74,7 @@ function typeLabel(type: RenderResult['timeline_type']): string {
 
     <!-- No results -->
     <div v-else class="no-results">
-      <el-icon :size="48"><Warning /></el-icon>
+      <AlertTriangle :size="48" />
       <p>暂无可用视频</p>
       <p class="no-results-hint">两个版本的渲染均未成功，请返回重新配置并重试</p>
     </div>
@@ -87,14 +87,14 @@ function typeLabel(type: RenderResult['timeline_type']): string {
   @apply flex flex-col gap-3;
 }
 .video-meta {
-  @apply flex items-center gap-4 text-sm text-slate-400 px-1;
+  @apply flex items-center gap-4 text-sm text-gray-500 px-1;
 }
 .video-actions {
   @apply flex items-center gap-2;
 }
 .no-results {
-  @apply flex flex-col items-center justify-center h-full text-slate-500;
+  @apply flex flex-col items-center justify-center h-full text-gray-400;
 }
 .no-results p { @apply mt-2; }
-.no-results-hint { @apply text-sm text-slate-600; }
+.no-results-hint { @apply text-sm text-gray-500; }
 </style>

@@ -3,12 +3,12 @@ import type { Asset } from '@/types'
 import { formatFileSize, formatDuration, formatDate } from '@/utils/helpers'
 import TagDisplay from '@/components/common/TagDisplay.vue'
 import {
-  Loading,
-  VideoCamera,
-  Picture,
-  Delete,
-  EditPen,
-} from '@element-plus/icons-vue'
+  Loader2,
+  Video,
+  Image as ImageIcon,
+  Trash2,
+  Pencil,
+} from 'lucide-vue-next'
 
 defineProps<{
   asset: Asset
@@ -25,19 +25,19 @@ const emit = defineEmits<{
   <div class="asset-card">
     <div class="card-thumbnail">
       <img :src="asset.thumbnail" :alt="asset.name" loading="lazy" class="thumbnail-img" />
-      
+
       <div v-if="asset.status === 'processing'" class="processing-overlay">
-        <el-icon class="is-loading" :size="24"><Loading /></el-icon>
+        <Loader2 :size="24" class="animate-spin" />
         <span class="mt-2 text-xs font-semibold">处理中...</span>
       </div>
 
       <div class="card-overlay">
         <div class="overlay-actions">
           <el-button circle type="primary" @click.stop="emit('tagUpdate', asset.id)">
-            <el-icon :size="16"><EditPen /></el-icon>
+            <Pencil :size="16" />
           </el-button>
           <el-button circle type="danger" @click.stop="emit('delete', asset.id)">
-            <el-icon :size="16"><Delete /></el-icon>
+            <Trash2 :size="16" />
           </el-button>
         </div>
         <div class="overlay-tags">
@@ -46,9 +46,8 @@ const emit = defineEmits<{
       </div>
 
       <div class="type-badge">
-        <el-icon :size="12">
-          <component :is="asset.type === 'video' ? VideoCamera : Picture" />
-        </el-icon>
+        <Video v-if="asset.type === 'video'" :size="12" />
+        <ImageIcon v-else :size="12" />
       </div>
       <div v-if="asset.type === 'video' && asset.duration" class="duration-badge">
         {{ formatDuration(asset.duration) }}
@@ -69,14 +68,11 @@ const emit = defineEmits<{
 <style scoped>
 @reference "tailwindcss";
 .asset-card {
-  @apply relative rounded-lg overflow-hidden transition-all duration-300;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  @apply relative rounded-2xl overflow-hidden transition-all duration-300 bg-white border border-gray-200 shadow-sm;
 }
 .asset-card:hover {
   transform: translateY(-4px);
-  box-shadow: var(--glow-primary);
-  border-color: var(--brand-primary);
+  @apply shadow-md border-purple-400;
 }
 
 .card-thumbnail {
@@ -90,7 +86,7 @@ const emit = defineEmits<{
 }
 
 .processing-overlay {
-  @apply absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-purple-300;
+  @apply absolute inset-0 bg-white/80 flex flex-col items-center justify-center text-purple-500;
   backdrop-filter: blur(4px);
 }
 
@@ -116,9 +112,9 @@ const emit = defineEmits<{
 .duration-badge { @apply bottom-2 right-2; }
 
 .card-name {
-  @apply text-sm font-semibold text-slate-200 whitespace-nowrap overflow-hidden text-ellipsis;
+  @apply text-sm font-semibold text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis;
 }
 .card-meta {
-  @apply flex items-center gap-2 text-xs text-slate-500 mt-1;
+  @apply flex items-center gap-2 text-xs text-gray-400 mt-1;
 }
 </style>

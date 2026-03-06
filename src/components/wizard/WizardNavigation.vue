@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { WizardStepConfig, WizardStep } from '@/types'
+import { Check } from 'lucide-vue-next'
 
 defineProps<{
   steps: WizardStepConfig[]
@@ -27,7 +28,7 @@ function getStepStatus(step: WizardStepConfig, current: WizardStep): 'active' | 
       @click="step.canAccess && emit('stepClick', step.step)"
     >
       <div class="step-dot">
-        <el-icon v-if="step.completed" :size="12"><Check /></el-icon>
+        <Check v-if="step.completed" :size="12" />
         <span v-else>{{ idx + 1 }}</span>
       </div>
       <span class="step-name">{{ step.name }}</span>
@@ -37,6 +38,7 @@ function getStepStatus(step: WizardStepConfig, current: WizardStep): 'active' | 
 </template>
 
 <style scoped>
+@reference "tailwindcss";
 .wizard-nav {
   display: flex;
   align-items: center;
@@ -51,16 +53,16 @@ function getStepStatus(step: WizardStepConfig, current: WizardStep): 'active' | 
   padding: 6px 12px;
   border-radius: 6px;
   transition: all 0.2s;
-  color: var(--text-secondary);
+  @apply text-gray-500;
 }
 .wizard-step:hover {
-  background: rgba(124, 58, 237, 0.06);
+  @apply bg-purple-50;
 }
 .wizard-step.active {
-  color: var(--brand-primary-light);
+  @apply text-purple-600;
 }
 .wizard-step.completed {
-  color: var(--success);
+  @apply text-emerald-600;
 }
 .wizard-step.pending {
   opacity: 0.5;
@@ -71,23 +73,19 @@ function getStepStatus(step: WizardStepConfig, current: WizardStep): 'active' | 
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 2px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 10px;
   font-weight: 600;
   transition: all 0.2s;
+  @apply border-2 border-gray-300;
 }
 .wizard-step.active .step-dot {
-  border-color: var(--brand-primary);
-  background: var(--brand-primary);
-  color: #fff;
+  @apply border-purple-500 bg-purple-500 text-white;
 }
 .wizard-step.completed .step-dot {
-  border-color: var(--success);
-  background: var(--success);
-  color: #fff;
+  @apply border-emerald-500 bg-emerald-500 text-white;
 }
 
 .step-name {
@@ -98,10 +96,10 @@ function getStepStatus(step: WizardStepConfig, current: WizardStep): 'active' | 
 .step-connector {
   width: 24px;
   height: 1px;
-  background: var(--border-color);
   margin-left: 4px;
+  @apply bg-gray-200;
 }
 .wizard-step.completed .step-connector {
-  background: var(--success);
+  @apply bg-emerald-500;
 }
 </style>

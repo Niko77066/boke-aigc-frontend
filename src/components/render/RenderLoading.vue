@@ -54,6 +54,7 @@ const currentTip = computed(() => LOADING_TIPS[currentTipIndex.value] ?? '')
 </template>
 
 <style scoped>
+@reference "tailwindcss";
 .render-loading {
   display: flex;
   flex-direction: column;
@@ -81,15 +82,15 @@ const currentTip = computed(() => LOADING_TIPS[currentTipIndex.value] ?? '')
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--brand-primary), #a78bfa);
-  box-shadow: 0 0 40px rgba(124, 58, 237, 0.4), 0 0 80px rgba(124, 58, 237, 0.15);
+  background: linear-gradient(135deg, #a78bfa, #c4b5fd);
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.2);
 }
 
 .orb-ring {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 2px solid rgba(124, 58, 237, 0.2);
+  @apply border-2 border-purple-200;
   animation: pulse-ring 2s ease-out infinite;
 }
 .orb-ring.delay {
@@ -119,12 +120,12 @@ const currentTip = computed(() => LOADING_TIPS[currentTipIndex.value] ?? '')
 .stage-label {
   font-size: 22px;
   font-weight: 700;
-  color: var(--text-primary);
+  @apply text-gray-900;
 }
 
 .stage-message {
   font-size: 14px;
-  color: var(--text-secondary);
+  @apply text-gray-500;
   text-align: center;
 }
 
@@ -136,8 +137,7 @@ const currentTip = computed(() => LOADING_TIPS[currentTipIndex.value] ?? '')
 
 .tip-text {
   font-size: 12px;
-  color: var(--text-secondary);
-  opacity: 0.6;
+  @apply text-gray-400;
   margin: 0;
   text-align: center;
 }

@@ -9,13 +9,13 @@ import SubtitleStyleSelector from '@/components/config/SubtitleStyleSelector.vue
 import { ElMessage } from 'element-plus'
 import {
   ArrowLeft,
-  Document,
-  Microphone,
+  FileText,
+  Mic,
   Check,
-  Odometer,
-  ChatDotSquare,
-  VideoPlay,
-} from '@element-plus/icons-vue'
+  Gauge,
+  MessageSquare,
+  Play,
+} from 'lucide-vue-next'
 
 const router = useRouter()
 const creativeStore = useCreativeStore()
@@ -67,40 +67,40 @@ function startRender() {
   <div class="audio-video-config flex flex-col h-full p-6 gap-6">
     <div class="page-header flex items-start justify-between">
       <div>
-        <h1 class="page-title text-2xl font-bold text-white">音画配置</h1>
-        <p class="page-desc text-sm text-slate-400 mt-1">
+        <h1 class="page-title text-2xl font-bold text-gray-900">音画配置</h1>
+        <p class="page-desc text-sm text-gray-500 mt-1">
           选择配音语音和字幕样式，定制您的营销视频风格
         </p>
       </div>
       <el-button text @click="goBack">
-        <el-icon class="mr-1"><ArrowLeft /></el-icon>
+        <ArrowLeft :size="16" class="mr-1" />
         返回修改文案
       </el-button>
     </div>
 
     <!-- Selected script preview -->
-    <div v-if="selectedScript" class="script-preview glass-morphism p-4 rounded-lg border-l-4 border-purple-500">
+    <div v-if="selectedScript" class="script-preview p-4 rounded-lg">
       <div class="preview-header flex items-center gap-2 mb-2">
-        <el-icon :size="14"><Document /></el-icon>
-        <span class="preview-label text-sm font-semibold text-purple-300">
+        <FileText :size="14" class="text-purple-500" />
+        <span class="preview-label text-sm font-semibold text-purple-600">
           已选方案: {{ selectedScript.title }}
         </span>
       </div>
-      <p class="preview-text text-sm text-slate-300 leading-relaxed">
+      <p class="preview-text text-sm text-gray-600 leading-relaxed">
         {{ selectedScript.tts_text }}
       </p>
     </div>
 
     <div class="config-sections grid grid-cols-2 gap-6 flex-1 min-h-0">
       <!-- Left: Audio Config -->
-      <div class="audio-section glass-morphism flex flex-col rounded-xl p-5">
+      <div class="audio-section glass-morphism flex flex-col rounded-2xl p-5">
         <div class="section-header flex items-center justify-between mb-4">
-          <div class="section-title flex items-center gap-2 text-lg font-semibold text-slate-100">
-            <el-icon><Microphone /></el-icon>
+          <div class="section-title flex items-center gap-2 text-lg font-semibold text-gray-800">
+            <Mic :size="16" class="text-purple-500" />
             <h2>配音语音</h2>
           </div>
           <span v-if="configStore.selectedVoice" class="section-status-done">
-            <el-icon :size="12"><Check /></el-icon>
+            <Check :size="12" />
             {{ configStore.selectedVoice.name }}
           </span>
           <span v-else class="section-status-pending">请选择</span>
@@ -113,32 +113,32 @@ function startRender() {
             @preview="handleVoicePreview"
           />
         </div>
-        <div v-if="configStore.selectedVoice" class="speed-control mt-4 pt-4 border-t border-white/10">
-          <div class="section-title flex items-center gap-2 text-base font-semibold text-slate-100 mb-2">
-            <el-icon><Odometer /></el-icon>
+        <div v-if="configStore.selectedVoice" class="speed-control mt-4 pt-4 border-t border-gray-200">
+          <div class="section-title flex items-center gap-2 text-base font-semibold text-gray-800 mb-2">
+            <Gauge :size="16" class="text-purple-500" />
             <span>语速调节</span>
           </div>
           <div class="flex items-center gap-3">
-            <span class="text-xs text-slate-400">慢</span>
+            <span class="text-xs text-gray-400">慢</span>
             <el-slider
               v-model="configStore.audioConfig.speed"
               :min="0.5" :max="2.0" :step="0.1"
               :format-tooltip="(v: number) => v.toFixed(1) + 'x'"
             />
-            <span class="text-xs text-slate-400">快</span>
+            <span class="text-xs text-gray-400">快</span>
           </div>
         </div>
       </div>
 
       <!-- Right: Subtitle Config -->
-      <div class="subtitle-section glass-morphism flex flex-col rounded-xl p-5">
+      <div class="subtitle-section glass-morphism flex flex-col rounded-2xl p-5">
         <div class="section-header flex items-center justify-between mb-4">
-          <div class="section-title flex items-center gap-2 text-lg font-semibold text-slate-100">
-            <el-icon><ChatDotSquare /></el-icon>
+          <div class="section-title flex items-center gap-2 text-lg font-semibold text-gray-800">
+            <MessageSquare :size="16" class="text-purple-500" />
             <h2>字幕样式</h2>
           </div>
           <span v-if="configStore.selectedStyle" class="section-status-done">
-            <el-icon :size="12"><Check /></el-icon>
+            <Check :size="12" />
             {{ configStore.selectedStyle.name }}
           </span>
           <span v-else class="section-status-pending">请选择</span>
@@ -154,19 +154,19 @@ function startRender() {
     </div>
 
     <!-- Action bar -->
-    <div class="action-bar glass-morphism flex items-center justify-between p-4 rounded-xl">
+    <div class="action-bar glass-morphism flex items-center justify-between p-4 rounded-2xl">
       <el-button size="large" @click="goBack">
-        <el-icon class="mr-1"><ArrowLeft /></el-icon>
+        <ArrowLeft :size="16" class="mr-1" />
         上一步
       </el-button>
       <el-button
         type="primary"
         size="large"
         :disabled="!canProceed"
-        class="render-btn font-bold rounded-lg px-6"
+        class="render-btn"
         @click="startRender"
       >
-        <el-icon class="mr-2"><VideoPlay /></el-icon>
+        <Play :size="16" class="mr-2" />
         开始渲染视频
       </el-button>
     </div>
@@ -175,24 +175,59 @@ function startRender() {
 
 <style scoped>
 @reference "tailwindcss";
+
+/* Clean card base */
+.glass-morphism {
+  @apply bg-white border border-gray-200;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.glass-morphism:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Script preview */
+.script-preview {
+  @apply bg-white border border-gray-200;
+  border-left: 4px solid #a78bfa;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Render button */
 .render-btn {
   @apply font-bold rounded-lg px-6;
-  background: var(--gradient-primary);
+  background: var(--brand-primary);
   border: none;
-  box-shadow: var(--glow-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
 }
 .render-btn:hover:not(.is-disabled) {
-  transform: translateY(-2px) scale(1.02);
-  filter: brightness(1.2);
-  box-shadow: 0 0 25px rgba(168, 85, 247, 0.8);
+  background: var(--brand-primary-dark);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
+
+/* Status badges */
 .section-status-done {
-  @apply flex items-center gap-1 text-xs font-medium bg-green-500/20 text-green-300 px-2 py-1 rounded-full;
+  @apply flex items-center gap-1 text-xs font-medium bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full;
 }
 .section-status-pending {
-  @apply text-xs text-slate-400;
+  @apply text-xs text-gray-400;
 }
+
+/* Action bar */
+.action-bar {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Page header */
+.page-header {
+  @apply bg-white border border-gray-200 rounded-xl p-6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Scrollbar hiding */
 .audio-section > div, .subtitle-section > div {
   -ms-overflow-style: none;
   scrollbar-width: none;

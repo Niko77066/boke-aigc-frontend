@@ -5,7 +5,7 @@ import { useRenderStore } from '@/stores/render'
 import { useWorkflowStore } from '@/stores/workflow'
 import VideoComparison from '@/components/result/VideoComparison.vue'
 import { ElMessage } from 'element-plus'
-import { WarningFilled, VideoCamera, CircleCheckFilled, RefreshRight } from '@element-plus/icons-vue'
+import { AlertTriangle, Video, CheckCircle2, RotateCw } from 'lucide-vue-next'
 import confetti from 'canvas-confetti'
 
 const router = useRouter()
@@ -67,17 +67,17 @@ onMounted(() => {
   <div class="result-delivery flex flex-col h-full p-6 gap-6">
     <div class="page-header">
       <div>
-        <h1 class="page-title text-2xl font-bold text-white">成片交付</h1>
-        <p class="page-desc text-sm text-slate-400 mt-1">
+        <h1 class="page-title text-2xl font-bold text-gray-900">成片交付</h1>
+        <p class="page-desc text-sm text-gray-500 mt-1">
           预览生成的营销视频，下载或导出工程文件
         </p>
       </div>
     </div>
 
-    <div class="results-section glass-morphism flex-1 flex flex-col rounded-xl overflow-hidden p-6">
+    <div class="results-section glass-morphism flex-1 flex flex-col rounded-2xl overflow-hidden p-6">
       <!-- Failure notice -->
       <div v-if="failedResults.length > 0" class="failure-notice">
-        <el-icon :size="16"><WarningFilled /></el-icon>
+        <AlertTriangle :size="16" />
         <span>
           {{ failedResults.length === 1 ? '一个版本' : '所有版本' }}渲染失败
           <template v-if="successResults.length > 0">，已为您展示成功的版本</template>
@@ -95,9 +95,9 @@ onMounted(() => {
 
       <!-- No results at all -->
       <div v-else class="empty-results">
-        <el-icon :size="64"><VideoCamera /></el-icon>
+        <Video :size="64" />
         <h2 class="text-xl font-semibold mt-4">暂无渲染结果</h2>
-        <p class="text-slate-400">请先完成创意配置和视频渲染</p>
+        <p class="text-gray-500">请先完成创意配置和视频渲染</p>
         <el-button type="primary" @click="router.push('/creative')">
           前往创意控制台
         </el-button>
@@ -105,14 +105,14 @@ onMounted(() => {
     </div>
 
     <!-- Action bar -->
-    <div v-if="hasResults" class="action-bar glass-morphism flex items-center justify-between p-4 rounded-xl">
+    <div v-if="hasResults" class="action-bar glass-morphism flex items-center justify-between p-4 rounded-2xl">
       <div class="success-count">
-        <el-icon :size="16"><CircleCheckFilled /></el-icon>
+        <CheckCircle2 :size="16" />
         {{ successResults.length }} 个版本渲染成功
       </div>
       <div class="action-buttons">
         <el-button size="large" @click="startOver">
-          <el-icon class="mr-1"><RefreshRight /></el-icon>
+          <RotateCw :size="16" class="mr-1" />
           重新制作
         </el-button>
       </div>
@@ -122,18 +122,46 @@ onMounted(() => {
 
 <style scoped>
 @reference "tailwindcss";
+
+/* Page header */
+.page-header {
+  @apply bg-white border border-gray-200 rounded-xl p-6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Glass morphism - clean card */
+.glass-morphism {
+  @apply bg-white border border-gray-200;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.glass-morphism:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Failure notice */
 .failure-notice {
   @apply flex items-center gap-2 p-3 mb-4 rounded-lg;
-  background-color: rgba(var(--danger-rgb), 0.1);
-  border: 1px solid rgba(var(--danger-rgb), 0.2);
-  color: var(--danger);
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
 }
+
+/* Empty results */
 .empty-results {
   @apply flex flex-col items-center justify-center h-full;
-  color: var(--text-secondary);
+  color: #9ca3af;
 }
+
+/* Success count */
 .success-count {
   @apply flex items-center gap-2 text-sm font-medium;
-  color: var(--success);
+  color: #059669;
+}
+
+/* Action bar */
+.action-bar {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 </style>

@@ -42,8 +42,8 @@ function previewStyle(style: SubtitleStyle): Record<string, string | undefined> 
             </div>
           </div>
           <div class="style-info p-3">
-            <div class="style-name text-sm font-semibold text-slate-200">{{ style.name }}</div>
-            <div class="style-desc text-xs text-slate-400 mt-1">{{ style.description }}</div>
+            <div class="style-name text-sm font-semibold text-gray-800">{{ style.name }}</div>
+            <div class="style-desc text-xs text-gray-500 mt-1">{{ style.description }}</div>
           </div>
         </div>
       </div>
@@ -54,34 +54,18 @@ function previewStyle(style: SubtitleStyle): Record<string, string | undefined> 
 <style scoped>
 @reference "tailwindcss";
 .style-card {
-  @apply relative p-px rounded-xl cursor-pointer transition-all duration-300;
-  background: var(--gradient-card);
+  @apply relative rounded-2xl cursor-pointer transition-all duration-300 bg-white border border-gray-200 shadow-sm;
 }
-.style-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(145deg, var(--border-color), transparent);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  transition: all 0.3s ease;
-}
-.style-card:hover::before {
-  background: var(--gradient-primary);
+.style-card:hover {
+  @apply border-purple-400 shadow-md;
 }
 .card-content {
-  @apply rounded-[11px] h-full w-full overflow-hidden;
-  background: #1e1e32;
+  @apply rounded-2xl h-full w-full overflow-hidden bg-white;
 }
 .selected-card {
+  @apply border-purple-500;
   transform: translateY(-2px);
-  box-shadow: var(--glow-primary);
-}
-.selected-card::before {
-  background: var(--gradient-primary);
+  box-shadow: var(--shadow-focus);
 }
 
 .style-preview {
@@ -89,7 +73,7 @@ function previewStyle(style: SubtitleStyle): Record<string, string | undefined> 
 }
 .preview-bg {
   @apply w-full h-full flex items-center justify-center text-center p-2;
-  background-image: linear-gradient(45deg, #0f0f1a, #1a1a2e), url('https://images.unsplash.com/photo-1611162617213-6d221bde3840?q=80&w=100&auto=format&fit=crop');
+  background-image: linear-gradient(45deg, rgba(0,0,0,0.03), rgba(0,0,0,0.08)), url('https://images.unsplash.com/photo-1611162617213-6d221bde3840?q=80&w=100&auto=format&fit=crop');
   background-size: cover;
   background-position: center;
   background-blend-mode: overlay;

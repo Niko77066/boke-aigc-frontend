@@ -25,6 +25,7 @@ withDefaults(defineProps<{
 </template>
 
 <style scoped>
+@reference "tailwindcss";
 .progress-wrapper {
   display: flex;
   align-items: center;
@@ -36,7 +37,7 @@ withDefaults(defineProps<{
   flex: 1;
   height: 8px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
+  @apply bg-gray-100;
   overflow: hidden;
 }
 
@@ -50,7 +51,7 @@ withDefaults(defineProps<{
 .progress-text {
   font-size: 14px;
   font-weight: 600;
-  color: var(--brand-primary-light);
+  @apply text-purple-600;
   white-space: nowrap;
   min-width: 40px;
   text-align: right;

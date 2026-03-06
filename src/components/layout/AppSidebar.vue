@@ -3,13 +3,13 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUIStore } from '@/stores/ui'
 import {
-  Operation,
-  FolderOpened,
-  EditPen,
-  Headset,
-  Loading,
-  VideoPlay,
-} from '@element-plus/icons-vue'
+  LayoutGrid,
+  FolderOpen,
+  Pencil,
+  Headphones,
+  Loader2,
+  Play,
+} from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,13 +19,13 @@ const activeTab = ref<'workflow' | 'assets'>('workflow')
 const menuItems = computed(() => {
   if (activeTab.value === 'workflow') {
     return [
-      { path: '/creative', label: '创意控制台', icon: EditPen },
-      { path: '/config', label: '音画配置', icon: Headset },
-      { path: '/render', label: '渲染进度', icon: Loading },
-      { path: '/result', label: '成片交付', icon: VideoPlay },
+      { path: '/creative', label: '创意控制台', icon: Pencil },
+      { path: '/config', label: '音画配置', icon: Headphones },
+      { path: '/render', label: '渲染进度', icon: Loader2 },
+      { path: '/result', label: '成片交付', icon: Play },
     ]
   }
-  return [{ path: '/assets', label: '资产管理', icon: FolderOpened }]
+  return [{ path: '/assets', label: '资产管理', icon: FolderOpen }]
 })
 
 function isActive(path: string) {
@@ -41,15 +41,15 @@ function navigate(path:string) {
 <template>
   <div class="sidebar-container" :class="{ 'is-open': uiStore.isSidebarOpen }">
     <div class="sidebar-backdrop" @click="uiStore.toggleSidebar"></div>
-    <aside class="app-sidebar glass-morphism flex flex-col border-r">
+    <aside class="app-sidebar flex flex-col border-r">
       <div class="sidebar-tabs p-3">
-        <div class="flex bg-black/20 rounded-lg p-1">
+        <div class="flex bg-gray-100 rounded-lg p-1">
           <button
             class="tab-btn"
             :class="{ 'active-tab': activeTab === 'workflow' }"
             @click="activeTab = 'workflow'"
           >
-            <el-icon :size="14"><Operation /></el-icon>
+            <LayoutGrid :size="14" />
             <span>自动化产线</span>
           </button>
           <button
@@ -57,7 +57,7 @@ function navigate(path:string) {
             :class="{ 'active-tab': activeTab === 'assets' }"
             @click="activeTab = 'assets'"
           >
-            <el-icon :size="14"><FolderOpened /></el-icon>
+            <FolderOpen :size="14" />
             <span>素材资产库</span>
           </button>
         </div>
@@ -72,16 +72,14 @@ function navigate(path:string) {
           @click="navigate(item.path)"
         >
           <div class="menu-icon flex items-center justify-center w-7 h-7 rounded-md">
-            <el-icon :size="16">
-              <component :is="item.icon" />
-            </el-icon>
+            <component :is="item.icon" :size="16" />
           </div>
           <span class="menu-label text-sm font-medium">{{ item.label }}</span>
         </div>
       </nav>
 
       <div class="sidebar-footer p-4 mt-auto">
-        <div class="version-info text-center text-xs text-slate-500">v1.0.0 Phase 1</div>
+        <div class="version-info text-center text-xs text-gray-400">v1.0.0 Phase 1</div>
       </div>
     </aside>
   </div>
@@ -91,41 +89,39 @@ function navigate(path:string) {
 @reference "tailwindcss";
 .app-sidebar {
   grid-area: sidebar;
-  background: rgba(20, 20, 37, 0.5); /* Darker glass for sidebar */
+  background: var(--gradient-sidebar);
   border-color: var(--border-color);
 }
 
 .tab-btn {
-  @apply flex-1 flex items-center justify-center gap-2 px-2 py-1.5 rounded-md text-slate-400 text-xs font-semibold;
+  @apply flex-1 flex items-center justify-center gap-2 px-2 py-1.5 rounded-md text-gray-500 text-xs font-semibold;
   transition: all 0.2s ease-in-out;
 }
 .tab-btn:hover {
-  @apply bg-white/5 text-slate-200;
-  transform: translateY(-1px);
+  @apply bg-white text-gray-700;
 }
 .active-tab {
-  @apply bg-purple-500/20 text-purple-300 shadow-inner;
+  @apply bg-white text-purple-600 shadow-sm;
 }
 
 .menu-item {
-  @apply flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-slate-400 relative overflow-hidden;
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-gray-500 relative overflow-hidden;
   transition: all 0.2s ease-in-out;
 }
 .menu-item:hover {
-  @apply bg-purple-500/10 text-slate-200;
-  transform: translateX(2px);
+  @apply bg-white/60 text-gray-700;
 }
 .menu-item .menu-icon {
-  @apply bg-purple-500/10;
+  @apply bg-gray-100 text-gray-500;
 }
 .menu-item:hover .menu-icon {
-  @apply bg-purple-500/20;
+  @apply bg-purple-50 text-purple-500;
 }
 
 .active-menu-item {
-  background: linear-gradient(90deg, rgba(168, 85, 247, 0.2), rgba(168, 85, 247, 0.1));
-  color: var(--text-bright);
+  @apply bg-white text-gray-900;
   font-weight: 600;
+  box-shadow: var(--shadow-sm);
 }
 
 .active-menu-item::before {
@@ -134,10 +130,9 @@ function navigate(path:string) {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 3px;
   background: var(--brand-primary);
-  border-radius: 0 4px 4px 0;
-  box-shadow: var(--glow-primary);
+  border-radius: 0 3px 3px 0;
 }
 
 .active-menu-item .menu-icon {
@@ -146,8 +141,7 @@ function navigate(path:string) {
 }
 
 .active-menu-item .menu-label {
-  color: var(--brand-primary-light);
-  text-shadow: var(--text-shadow-primary);
+  color: var(--brand-primary);
 }
 
 @media (max-width: 767px) {
@@ -172,7 +166,7 @@ function navigate(path:string) {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.2);
     opacity: 0;
     transition: opacity 0.3s ease-in-out;
   }

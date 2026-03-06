@@ -43,7 +43,7 @@ const uiStore = useUIStore()
 .app-main {
   grid-area: main;
   overflow-y: auto;
-  background: var(--bg-base);
+  background-color: var(--bg-base);
 }
 
 .main-content {

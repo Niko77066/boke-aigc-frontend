@@ -3,6 +3,7 @@ import { reactive, computed } from 'vue'
 import type { TaskConfig } from '@/types'
 import { AUDIENCES, KB_ID } from '@/utils/constants'
 import TagInput from '@/components/common/TagInput.vue'
+import { Wand2 } from 'lucide-vue-next'
 
 const props = defineProps<{
   config?: Partial<TaskConfig>
@@ -99,7 +100,7 @@ function handleSubmit() {
         class="generate-btn"
         @click="handleSubmit"
       >
-        <el-icon class="mr-1"><MagicStick /></el-icon>
+        <Wand2 :size="16" class="mr-1" />
         AI 生成创意文案
       </el-button>
     </div>
@@ -151,12 +152,12 @@ function handleSubmit() {
 }
 .audience-card:hover {
   border-color: var(--brand-primary);
-  background: rgba(124, 58, 237, 0.08);
+  background: rgba(124, 92, 252, 0.04);
 }
 .audience-card.selected-card {
   border-color: var(--brand-primary);
-  background: rgba(124, 58, 237, 0.15);
-  box-shadow: var(--glow-primary);
+  background: rgba(124, 92, 252, 0.08);
+  box-shadow: var(--shadow-focus);
 }
 
 .audience-name {
@@ -194,15 +195,15 @@ function handleSubmit() {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
-  background: rgba(124, 58, 237, 0.15);
-  color: var(--brand-primary-light);
-  border: 1px solid rgba(124, 58, 237, 0.3);
+  background: rgba(124, 92, 252, 0.08);
+  color: var(--brand-primary);
+  border: 1px solid rgba(124, 92, 252, 0.2);
 }
 
 .preset-click {
   cursor: pointer;
   opacity: 0.6;
-  background: rgba(124, 58, 237, 0.08);
+  background: rgba(124, 92, 252, 0.04);
 }
 .preset-click:hover {
   opacity: 1;
@@ -218,14 +219,14 @@ function handleSubmit() {
   font-size: 15px;
   font-weight: 600;
   border-radius: 10px;
-  background: var(--gradient-primary);
+  background: var(--brand-primary);
   border: none;
-  box-shadow: var(--glow-primary);
-  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
 }
 .generate-btn:hover:not(:disabled) {
-  transform: translateY(-2px) scale(1.02);
-  filter: brightness(1.2);
-  box-shadow: 0 0 25px rgba(124, 58, 237, 0.8);
+  background: var(--brand-primary-dark);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 </style>

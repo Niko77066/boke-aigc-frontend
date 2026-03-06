@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Close } from '@element-plus/icons-vue'
+import { X } from 'lucide-vue-next'
 
 withDefaults(defineProps<{
   tags: string[]
@@ -15,10 +15,10 @@ const emit = defineEmits<{
 }>()
 
 const tagColors = [
-  'bg-purple-500/20 text-purple-300 border-purple-500/30',
-  'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
-  'bg-green-500/20 text-green-300 border-green-500/30',
-  'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  'bg-purple-50 text-purple-600 border-purple-200',
+  'bg-cyan-50 text-cyan-600 border-cyan-200',
+  'bg-emerald-50 text-emerald-600 border-emerald-200',
+  'bg-amber-50 text-amber-600 border-amber-200',
 ]
 
 function getTagColor(index: number) {
@@ -35,19 +35,17 @@ function getTagColor(index: number) {
       :class="getTagColor(idx)"
     >
       {{ tag }}
-      <el-icon
+      <X
         v-if="editable"
         class="tag-remove"
         :size="12"
         @click.stop="emit('remove', tag)"
-      >
-        <Close />
-      </el-icon>
+      />
     </span>
-    <span v-if="tags.length > maxDisplay" class="tag-capsule bg-slate-500/20 text-slate-300 border-slate-500/30">
+    <span v-if="tags.length > maxDisplay" class="tag-capsule bg-gray-50 text-gray-500 border-gray-200">
       +{{ tags.length - maxDisplay }}
     </span>
-    <span v-if="tags.length === 0" class="text-xs text-slate-500">暂无标签</span>
+    <span v-if="tags.length === 0" class="text-xs text-gray-400">暂无标签</span>
   </div>
 </template>
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onBeforeUnmount } from 'vue'
-import { VideoCameraFilled } from '@element-plus/icons-vue'
+import { Video } from 'lucide-vue-next'
 
 withDefaults(defineProps<{
   src: string
@@ -52,7 +52,7 @@ onBeforeUnmount(() => {
           @error="onError"
         />
         <div v-else class="video-error">
-          <el-icon :size="40"><VideoCameraFilled /></el-icon>
+          <Video :size="40" />
           <p>视频加载失败</p>
         </div>
       </div>
@@ -63,20 +63,15 @@ onBeforeUnmount(() => {
 <style scoped>
 @reference "tailwindcss";
 .video-player-wrapper {
-  @apply relative p-px rounded-xl;
-  background: linear-gradient(145deg, var(--border-color), var(--brand-primary));
-  box-shadow: var(--glow-primary);
+  @apply relative rounded-2xl bg-white border border-gray-200 shadow-md;
 }
 
 .video-player-content {
-  @apply rounded-[11px] overflow-hidden;
-  background: #1e1e32;
+  @apply rounded-xl overflow-hidden bg-white;
 }
 
 .player-title {
-  @apply px-4 py-2 text-sm font-semibold text-slate-200;
-  background: rgba(30, 30, 50, 0.5);
-  border-bottom: 1px solid var(--border-color);
+  @apply px-4 py-2 text-sm font-semibold text-gray-800 bg-gray-50 border-b border-gray-200;
 }
 
 .player-container {
@@ -88,6 +83,6 @@ onBeforeUnmount(() => {
 }
 
 .video-error {
-  @apply w-full h-full flex flex-col items-center justify-center gap-2 text-slate-500;
+  @apply w-full h-full flex flex-col items-center justify-center gap-2 text-gray-400;
 }
 </style>

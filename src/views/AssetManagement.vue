@@ -5,7 +5,7 @@ import FileUploader from '@/components/upload/FileUploader.vue'
 import AssetCard from '@/components/upload/AssetCard.vue'
 import TagInput from '@/components/common/TagInput.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, FolderOpened, Upload, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { Search, FolderOpen, Upload, Loader2, CheckCircle, XCircle } from 'lucide-vue-next'
 import type { UploadVideoOptions } from '@/api/external'
 
 const assetStore = useAssetStore()
@@ -135,19 +135,19 @@ async function saveTags() {
   <div class="asset-management flex flex-col h-full p-6 gap-6">
     <div class="page-header flex items-start justify-between">
       <div>
-        <h1 class="page-title text-2xl font-bold text-white">资产管理</h1>
-        <p class="page-desc text-sm text-slate-400 mt-1">
+        <h1 class="page-title text-2xl font-bold text-gray-900">资产管理</h1>
+        <p class="page-desc text-sm text-gray-500 mt-1">
           上传和管理捕鱼游戏营销素材，AI自动打标分类
         </p>
       </div>
       <div class="header-stats flex items-center gap-6 text-center">
         <div>
-          <span class="text-2xl font-bold text-purple-300">{{ assetStore.assets.length }}</span>
-          <span class="block text-xs text-slate-400">总素材</span>
+          <span class="text-2xl font-bold text-purple-600">{{ assetStore.assets.length }}</span>
+          <span class="block text-xs text-gray-500">总素材</span>
         </div>
         <div>
-          <span class="text-2xl font-bold text-cyan-300">{{ processingAssets.length }}</span>
-          <span class="block text-xs text-slate-400">处理中</span>
+          <span class="text-2xl font-bold text-blue-500">{{ processingAssets.length }}</span>
+          <span class="block text-xs text-gray-500">处理中</span>
         </div>
       </div>
     </div>
@@ -159,10 +159,10 @@ async function saveTags() {
       <!-- 上传配置（真实 API 模式时显示） -->
       <div v-if="useRealApi" class="upload-config mt-3">
         <div
-          class="config-toggle flex items-center gap-2 cursor-pointer text-sm text-slate-400 hover:text-cyan-300 transition-colors"
+          class="config-toggle flex items-center gap-2 cursor-pointer text-sm text-gray-500 hover:text-purple-600 transition-colors"
           @click="showUploadConfig = !showUploadConfig"
         >
-          <el-icon><Upload /></el-icon>
+          <Upload :size="16" />
           <span>{{ showUploadConfig ? '收起上传配置' : '展开上传配置（产品名/分析维度）' }}</span>
         </div>
         <transition name="fade-slide">
@@ -198,22 +198,22 @@ async function saveTags() {
       <!-- 上传/处理状态 -->
       <div
         v-if="assetStore.uploadState !== 'idle'"
-        class="upload-status glass-morphism rounded-lg p-4 mt-3"
+        class="upload-status rounded-lg p-4 mt-3"
       >
         <div class="flex items-center justify-between mb-2">
           <span class="text-sm font-medium" :class="{
-            'text-cyan-300': assetStore.uploadState === 'processing',
-            'text-green-400': assetStore.uploadState === 'completed',
-            'text-yellow-400': assetStore.uploadState === 'partial_failed',
-            'text-red-400': assetStore.uploadState === 'error',
-            'text-purple-300': assetStore.uploadState === 'uploading',
+            'text-blue-500': assetStore.uploadState === 'processing',
+            'text-emerald-600': assetStore.uploadState === 'completed',
+            'text-amber-500': assetStore.uploadState === 'partial_failed',
+            'text-red-500': assetStore.uploadState === 'error',
+            'text-purple-600': assetStore.uploadState === 'uploading',
           }">
-            <el-icon v-if="assetStore.uploadState === 'processing' || assetStore.uploadState === 'uploading'" class="is-loading mr-1"><Loading /></el-icon>
-            <el-icon v-else-if="assetStore.uploadState === 'completed'" class="mr-1"><CircleCheck /></el-icon>
-            <el-icon v-else-if="assetStore.uploadState === 'error' || assetStore.uploadState === 'partial_failed'" class="mr-1"><CircleClose /></el-icon>
+            <Loader2 v-if="assetStore.uploadState === 'processing' || assetStore.uploadState === 'uploading'" :size="16" class="animate-spin mr-1 inline-block align-text-bottom" />
+            <CheckCircle v-else-if="assetStore.uploadState === 'completed'" :size="16" class="mr-1 inline-block align-text-bottom" />
+            <XCircle v-else-if="assetStore.uploadState === 'error' || assetStore.uploadState === 'partial_failed'" :size="16" class="mr-1 inline-block align-text-bottom" />
             {{ uploadStateLabel }}
           </span>
-          <span v-if="assetStore.totalVideoCount > 0" class="text-xs text-slate-400">
+          <span v-if="assetStore.totalVideoCount > 0" class="text-xs text-gray-500">
             {{ assetStore.processedCount }} / {{ assetStore.totalVideoCount }} 个视频
           </span>
         </div>
@@ -221,7 +221,7 @@ async function saveTags() {
           v-if="assetStore.uploadState === 'processing'"
           :percentage="assetStore.totalVideoCount > 0 ? Math.round((assetStore.processedCount / assetStore.totalVideoCount) * 100) : 0"
           :stroke-width="6"
-          color="#22d3ee"
+          color="#7C5CFC"
         />
         <!-- 各视频状态明细 -->
         <div v-if="assetStore.videoStatuses.length > 0" class="video-status-list mt-3 space-y-1">
@@ -230,40 +230,41 @@ async function saveTags() {
             :key="v.file_name"
             class="flex items-center justify-between text-xs py-1 px-2 rounded"
             :class="{
-              'bg-green-900/20': v.state === 'completed',
-              'bg-red-900/20': v.state === 'failed',
-              'bg-slate-800/40': v.state !== 'completed' && v.state !== 'failed',
+              'bg-emerald-50': v.state === 'completed',
+              'bg-red-50': v.state === 'failed',
+              'bg-gray-50': v.state !== 'completed' && v.state !== 'failed',
             }"
           >
-            <span class="text-slate-300 truncate max-w-[60%]">{{ v.file_name }}</span>
+            <span class="text-gray-700 truncate max-w-[60%]">{{ v.file_name }}</span>
             <span :class="{
-              'text-green-400': v.state === 'completed',
-              'text-red-400': v.state === 'failed',
-              'text-cyan-300': v.state === 'analyzing',
-              'text-purple-300': v.state === 'uploading' || v.state === 'uploading_kb',
-              'text-slate-400': v.state === 'pending',
+              'text-emerald-600': v.state === 'completed',
+              'text-red-500': v.state === 'failed',
+              'text-blue-500': v.state === 'analyzing',
+              'text-purple-600': v.state === 'uploading' || v.state === 'uploading_kb',
+              'text-gray-400': v.state === 'pending',
             }">
               {{ videoStateLabel[v.state] ?? v.state }}
             </span>
           </div>
         </div>
         <!-- 错误信息 -->
-        <div v-if="assetStore.uploadError" class="mt-2 text-xs text-red-400">
+        <div v-if="assetStore.uploadError" class="mt-2 text-xs text-red-500">
           {{ assetStore.uploadError }}
         </div>
       </div>
     </div>
 
-    <div class="glass-morphism flex-1 flex flex-col rounded-xl overflow-hidden p-5 gap-4">
+    <div class="glass-morphism flex-1 flex flex-col rounded-2xl overflow-hidden p-5 gap-4">
       <!-- Filters -->
       <div class="filter-bar flex items-center gap-4">
         <el-input
           v-model="searchQuery"
           placeholder="搜索素材名称或标签..."
-          :prefix-icon="Search"
           clearable
           class="search-input flex-1"
-        />
+        >
+          <template #prefix><Search :size="16" class="text-gray-400" /></template>
+        </el-input>
         <el-radio-group v-model="typeFilter">
           <el-radio-button value="all">全部</el-radio-button>
           <el-radio-button value="video">视频</el-radio-button>
@@ -276,8 +277,8 @@ async function saveTags() {
         <div v-if="assetStore.loading" class="grid grid-cols-asset gap-4">
           <div v-for="i in 6" :key="i" class="skeleton h-52 rounded-lg"></div>
         </div>
-        <div v-else-if="displayedAssets.length === 0" class="flex flex-col items-center justify-center h-full text-slate-500">
-          <el-icon :size="64"><FolderOpened /></el-icon>
+        <div v-else-if="displayedAssets.length === 0" class="flex flex-col items-center justify-center h-full text-gray-400">
+          <FolderOpen :size="64" />
           <p class="mt-4 text-lg">暂无素材</p>
           <p class="text-sm">拖拽文件到上方区域开始上传</p>
         </div>
@@ -309,74 +310,53 @@ async function saveTags() {
 
 /* Base Container */
 .asset-management {
-  background-color: #0f0e17;
-  color: #ffffff;
+  background-color: #F8F7F4;
+  color: #111827;
 }
 
 /* Page Header */
 .page-header {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(34, 211, 238, 0.1));
-  border: 1px solid rgba(168, 85, 247, 0.2);
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  @apply bg-white border border-gray-200 rounded-xl p-6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
 }
 
 .page-header:hover {
-  box-shadow: 0 0 15px rgba(168, 85, 247, 0.15), 0 0 20px rgba(34, 211, 238, 0.1);
-  border-color: rgba(168, 85, 247, 0.4);
+  box-shadow: var(--shadow-md);
 }
 
-.page-title {
-  text-shadow: 0 0 10px rgba(168, 85, 247, 0.4);
-}
-
-/* Glass Morphism */
+/* Glass Morphism - clean card */
 .glass-morphism {
-  background: rgba(26, 22, 37, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(168, 85, 247, 0.2);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+  @apply bg-white border border-gray-200;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
 }
 
 .glass-morphism:hover {
-  border-color: rgba(34, 211, 238, 0.3);
-  box-shadow: 0 0 15px rgba(168, 85, 247, 0.15), inset 0 0 20px rgba(34, 211, 238, 0.05);
+  border-color: #d1d5db;
+  box-shadow: var(--shadow-md);
 }
 
 /* Upload Config */
 .config-toggle {
   transition: all 0.3s ease;
 }
-.config-toggle:hover {
-  color: #22d3ee;
-  text-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
-}
 .config-fields {
-  background: linear-gradient(135deg, rgba(30, 27, 46, 0.8), rgba(26, 22, 37, 0.9));
-  border-top: 1px solid rgba(34, 211, 238, 0.2);
+  @apply bg-gray-50 border-t border-gray-200;
 }
 
 /* Upload Status */
 .upload-status {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(34, 211, 238, 0.05));
-  border-left: 2px solid #a855f7;
-  animation: breathe-glow 3s infinite alternate;
-}
-@keyframes breathe-glow {
-  0% { box-shadow: 0 0 5px rgba(168, 85, 247, 0.1); }
-  100% { box-shadow: 0 0 15px rgba(168, 85, 247, 0.3), 0 0 10px rgba(34, 211, 238, 0.2); }
+  @apply bg-purple-50;
+  border-left: 2px solid #a78bfa;
 }
 .video-status-list > div {
   border: 1px solid transparent;
   transition: all 0.3s ease;
 }
 .video-status-list > div:hover {
-  background: rgba(168, 85, 247, 0.1);
-  border-color: rgba(168, 85, 247, 0.3);
+  @apply bg-purple-50;
+  border-color: #e9d5ff;
 }
 
 /* Grid */
@@ -393,10 +373,10 @@ async function saveTags() {
 
 /* Skeleton */
 .skeleton {
-  background: linear-gradient(90deg, #1a1625 25%, #1e1b2e 50%, #1a1625 75%);
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s ease-in-out infinite;
-  border: 1px solid rgba(168, 85, 247, 0.1);
+  border: 1px solid #e5e7eb;
 }
 @keyframes skeleton-loading {
   0% { background-position: 200% 0; }
@@ -412,65 +392,64 @@ async function saveTags() {
   transform: translateY(-8px);
 }
 
-/* Element Plus Overrides */
+/* Element Plus Overrides - Light theme */
 :deep(.el-input__wrapper) {
-  background-color: rgba(15, 14, 23, 0.6) !important;
-  border: 1px solid rgba(168, 85, 247, 0.3) !important;
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db !important;
   box-shadow: none !important;
   transition: all 0.3s ease !important;
 }
 :deep(.el-input__wrapper.is-focus),
 :deep(.el-input__wrapper:hover) {
-  border-color: #22d3ee !important;
-  box-shadow: 0 0 8px rgba(34, 211, 238, 0.4), inset 0 0 4px rgba(168, 85, 247, 0.2) !important;
+  border-color: var(--brand-primary) !important;
+  box-shadow: 0 0 0 2px rgba(124, 92, 252, 0.1) !important;
 }
 :deep(.el-input-group__prepend) {
-  background-color: rgba(26, 22, 37, 0.8) !important;
-  border: 1px solid rgba(168, 85, 247, 0.3) !important;
+  background-color: #f9fafb !important;
+  border: 1px solid #d1d5db !important;
   border-right: none !important;
-  color: #a855f7 !important;
-  font-weight: bold;
+  color: #6b7280 !important;
+  font-weight: 600;
 }
 :deep(.el-radio-button__inner) {
-  background-color: rgba(26, 22, 37, 0.6) !important;
-  border: 1px solid rgba(168, 85, 247, 0.3) !important;
-  color: #cbd5e1 !important;
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  color: #6b7280 !important;
   transition: all 0.3s ease !important;
 }
 :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
-  background-color: rgba(168, 85, 247, 0.2) !important;
-  color: #22d3ee !important;
-  border-color: #a855f7 !important;
-  box-shadow: -1px 0 0 0 #a855f7, 0 0 10px rgba(168, 85, 247, 0.4) !important;
+  background-color: #f5f3ff !important;
+  color: var(--brand-primary) !important;
+  border-color: var(--brand-primary) !important;
+  box-shadow: -1px 0 0 0 var(--brand-primary) !important;
 }
 :deep(.el-dialog) {
-  background: #1a1625 !important;
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(168, 85, 247, 0.2) !important;
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 1rem !important;
 }
 :deep(.el-dialog__title) {
-  color: #22d3ee !important;
-  text-shadow: 0 0 8px rgba(34, 211, 238, 0.4);
+  color: #111827 !important;
 }
 :deep(.el-button) {
-  background-color: rgba(26, 22, 37, 0.8) !important;
-  border: 1px solid rgba(168, 85, 247, 0.4) !important;
-  color: #e2e8f0 !important;
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  color: #374151 !important;
   transition: all 0.3s ease !important;
 }
 :deep(.el-button:hover) {
-  background-color: rgba(168, 85, 247, 0.15) !important;
-  border-color: #22d3ee !important;
-  color: #22d3ee !important;
-  box-shadow: 0 0 10px rgba(34, 211, 238, 0.4) !important;
+  background-color: #f9fafb !important;
+  border-color: var(--brand-primary) !important;
+  color: var(--brand-primary) !important;
 }
 :deep(.el-button--primary) {
-  background: linear-gradient(135deg, #a855f7, #7e22ce) !important;
+  background: var(--brand-primary) !important;
   border: none !important;
   color: #ffffff !important;
 }
 :deep(.el-button--primary:hover) {
-  background: linear-gradient(135deg, #c084fc, #9333ea) !important;
-  box-shadow: 0 0 15px rgba(168, 85, 247, 0.6), 0 0 5px rgba(34, 211, 238, 0.4) !important;
+  background: var(--brand-primary-dark) !important;
+  box-shadow: var(--shadow-md) !important;
 }
 </style>

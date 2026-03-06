@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { MAX_FILE_SIZE, SUPPORTED_VIDEO_FORMATS, SUPPORTED_IMAGE_FORMATS } from '@/utils/constants'
 import { formatFileSize, getFileExtension } from '@/utils/helpers'
-import { UploadFilled } from '@element-plus/icons-vue'
+import { Upload } from 'lucide-vue-next'
 
 withDefaults(defineProps<{
   accept?: string[]
@@ -92,7 +92,7 @@ function triggerInput() {
         @change="onFileChange"
       />
       <div class="upload-icon">
-        <el-icon :size="40"><UploadFilled /></el-icon>
+        <Upload :size="40" />
       </div>
       <p class="upload-title">拖拽文件到这里，或 <span class="upload-link">点击上传</span></p>
       <p class="upload-hint">支持 MP4, PNG, JPG 等格式，单文件不超过 {{ formatFileSize(maxSize) }}</p>
@@ -109,9 +109,8 @@ function triggerInput() {
 }
 
 .file-uploader {
-  @apply relative p-1 rounded-xl cursor-pointer transition-all duration-300;
-  background: var(--bg-surface);
-  border: 2px dashed var(--border-color);
+  @apply relative p-1 rounded-xl cursor-pointer transition-all duration-300 bg-white;
+  border: 2px dashed #d1d5db;
 }
 
 .file-uploader:hover {
@@ -131,25 +130,24 @@ function triggerInput() {
 }
 
 .uploader-content {
-  @apply flex flex-col items-center justify-center gap-2 text-center p-8 rounded-lg;
-  background: var(--bg-surface);
+  @apply flex flex-col items-center justify-center gap-2 text-center p-8 rounded-lg bg-white;
 }
 
 .upload-icon {
   @apply text-purple-400 transition-all;
 }
 .file-uploader:hover .upload-icon {
-  @apply text-purple-300;
+  @apply text-purple-500;
   transform: scale(1.1);
 }
 
 .upload-title {
-  @apply text-base font-semibold text-slate-200;
+  @apply text-base font-semibold text-gray-700;
 }
 .upload-link {
-  @apply text-purple-300 font-bold;
+  @apply text-purple-500 font-bold;
 }
 .upload-hint {
-  @apply text-xs text-slate-500;
+  @apply text-xs text-gray-400;
 }
 </style>

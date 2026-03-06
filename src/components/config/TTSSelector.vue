@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TTSVoice } from '@/types'
-import { VideoPlay } from '@element-plus/icons-vue'
+import { Play } from 'lucide-vue-next'
 
 defineProps<{
   voices: TTSVoice[]
@@ -37,15 +37,15 @@ function styleLabel(style: TTSVoice['style']): string {
           <div class="flex items-center gap-3">
             <div class="voice-avatar text-4xl">{{ voice.avatar }}</div>
             <div class="voice-info">
-              <div class="voice-name text-sm font-bold text-slate-100">{{ voice.name }}</div>
+              <div class="voice-name text-sm font-bold text-gray-800">{{ voice.name }}</div>
               <div class="flex items-center gap-2 mt-1">
                 <span
                   class="px-2 py-0.5 rounded-full text-xs"
-                  :class="voice.gender === 'male' ? 'bg-blue-500/20 text-blue-300' : 'bg-pink-500/20 text-pink-300'"
+                  :class="voice.gender === 'male' ? 'bg-blue-50 text-blue-600' : 'bg-pink-50 text-pink-600'"
                 >
                   {{ voice.gender === 'male' ? '男声' : '女声' }}
                 </span>
-                <span class="text-xs text-slate-400">{{ styleLabel(voice.style) }}</span>
+                <span class="text-xs text-gray-500">{{ styleLabel(voice.style) }}</span>
               </div>
             </div>
             <el-button
@@ -54,7 +54,7 @@ function styleLabel(style: TTSVoice['style']): string {
               class="preview-btn"
               @click.stop="emit('preview', voice.id)"
             >
-              <el-icon :size="14"><VideoPlay /></el-icon>
+              <Play :size="14" />
             </el-button>
           </div>
           <div class="waveform">
@@ -69,53 +69,38 @@ function styleLabel(style: TTSVoice['style']): string {
 <style scoped>
 @reference "tailwindcss";
 .voice-card {
-  @apply relative p-px rounded-xl cursor-pointer transition-all duration-300;
-  background: var(--gradient-card);
+  @apply relative rounded-2xl cursor-pointer transition-all duration-300 bg-white border border-gray-200 shadow-sm;
 }
-.voice-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(145deg, var(--border-color), transparent);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  transition: all 0.3s ease;
-}
-.voice-card:hover::before {
-  background: var(--gradient-primary);
+.voice-card:hover {
+  @apply border-purple-400 shadow-md;
 }
 .card-content {
-  @apply p-3 rounded-[11px] h-full w-full overflow-hidden relative;
-  background: #1e1e32;
+  @apply p-3 rounded-2xl h-full w-full overflow-hidden relative bg-white;
 }
 .selected-card {
+  @apply border-purple-500;
   transform: translateY(-2px);
-  box-shadow: var(--glow-primary);
-}
-.selected-card::before {
-  background: var(--gradient-primary);
+  box-shadow: var(--shadow-focus);
 }
 
 .preview-btn {
-  @apply bg-purple-500/20 text-purple-300 border-none transition-all opacity-50 hover:opacity-100 hover:bg-purple-500/40;
+  @apply bg-purple-50 text-purple-500 border-none transition-all opacity-50 hover:opacity-100 hover:bg-purple-100;
 }
 .voice-card:hover .preview-btn {
   opacity: 1;
 }
 
 .waveform {
-  @apply absolute bottom-0 left-0 right-0 flex items-end justify-between h-6 px-3 opacity-10;
+  @apply absolute bottom-0 left-0 right-0 flex items-end justify-between h-6 px-3;
+  opacity: 0.05;
   pointer-events: none;
 }
 .wave-bar {
-  @apply w-px bg-purple-400;
+  @apply w-px bg-purple-300;
   transition: height 0.3s ease-in-out;
 }
 .selected-card .waveform, .voice-card:hover .waveform {
-  opacity: 0.2;
+  opacity: 0.15;
 }
 .selected-card .wave-bar {
   animation: wave-dance 1.5s ease-in-out infinite alternate;

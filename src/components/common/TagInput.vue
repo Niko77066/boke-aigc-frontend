@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { X } from 'lucide-vue-next'
 
 const props = withDefaults(defineProps<{
   tags: string[]
@@ -53,7 +54,7 @@ function handleKeydown(e: KeyboardEvent) {
         class="capsule-tag"
       >
         {{ tag }}
-        <el-icon class="tag-close" :size="12" @click="removeTag(tag)"><Close /></el-icon>
+        <X class="tag-close" :size="12" @click="removeTag(tag)" />
       </span>
       <input
         v-model="inputValue"
@@ -68,6 +69,7 @@ function handleKeydown(e: KeyboardEvent) {
 </template>
 
 <style scoped>
+@reference "tailwindcss";
 .tag-input-wrapper {
   width: 100%;
 }
@@ -78,8 +80,8 @@ function handleKeydown(e: KeyboardEvent) {
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   min-height: 38px;
   transition: border-color 0.2s;
@@ -97,9 +99,7 @@ function handleKeydown(e: KeyboardEvent) {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
-  background: rgba(124, 58, 237, 0.15);
-  color: var(--brand-primary-light);
-  border: 1px solid rgba(124, 58, 237, 0.3);
+  @apply bg-purple-50 text-purple-600 border border-purple-200;
 }
 
 .tag-close {
@@ -118,13 +118,13 @@ function handleKeydown(e: KeyboardEvent) {
   border: none;
   outline: none;
   background: transparent;
-  color: var(--text-primary);
+  color: #1f2937;
   font-size: 13px;
   padding: 2px 4px;
 }
 .tag-raw-input::placeholder {
-  color: var(--text-secondary);
-  opacity: 0.5;
+  color: #d1d5db;
+  opacity: 1;
 }
 
 .tag-count {

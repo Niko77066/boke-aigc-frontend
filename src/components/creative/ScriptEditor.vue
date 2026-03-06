@@ -20,7 +20,6 @@ const charCount = computed(() => props.modelValue.length)
 const wordCount = computed(() => {
   const text = props.modelValue.trim()
   if (!text) return 0
-  // Count Chinese characters + English words
   const chinese = (text.match(/[\u4e00-\u9fa5]/g) || []).length
   const english = (text.match(/[a-zA-Z]+/g) || []).length
   return chinese + english
@@ -40,7 +39,6 @@ function handleItalic() {
 }
 
 function handleHeading() {
-  // Toggle between heading and paragraph
   const sel = window.getSelection()
   if (sel && sel.rangeCount > 0) {
     const parent = sel.anchorNode?.parentElement
@@ -69,7 +67,6 @@ function handlePaste(e: ClipboardEvent) {
   document.execCommand('insertText', false, text)
 }
 
-// Sync external modelValue changes into the editor
 watch(() => props.modelValue, (newVal) => {
   if (editorRef.value && editorRef.value.innerText !== newVal) {
     editorRef.value.innerText = newVal
@@ -139,39 +136,35 @@ onMounted(() => {
 @reference "tailwindcss";
 
 .script-editor {
-  @apply flex flex-col rounded-xl overflow-hidden border border-white/10;
-  background: rgba(20, 20, 35, 0.6);
-  backdrop-filter: blur(12px);
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  @apply flex flex-col rounded-2xl overflow-hidden border;
+  background: var(--bg-surface);
+  border-color: var(--border-color);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .script-editor:focus-within {
-  border-color: rgba(168, 85, 247, 0.5);
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.15), inset 0 0 10px rgba(168, 85, 247, 0.05);
-}
-
-.script-editor.is-readonly {
-  border-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--brand-primary);
+  box-shadow: var(--shadow-focus);
 }
 
 /* Toolbar */
 .editor-toolbar {
-  @apply flex items-center gap-1 px-3 py-2 border-b border-white/10;
-  background: linear-gradient(90deg, rgba(168, 85, 247, 0.1) 0%, rgba(6, 182, 212, 0.05) 100%);
+  @apply flex items-center gap-1 px-3 py-2 border-b;
+  border-color: var(--border-color);
+  background: var(--bg-muted);
 }
 
 .toolbar-btn {
-  @apply w-8 h-8 flex items-center justify-center rounded-md text-sm text-slate-300 cursor-pointer;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  @apply w-8 h-8 flex items-center justify-center rounded-md text-sm text-gray-600 cursor-pointer;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
   transition: all 0.2s ease;
 }
 
 .toolbar-btn:hover {
-  @apply text-white;
-  background: rgba(168, 85, 247, 0.3);
-  border-color: rgba(168, 85, 247, 0.5);
-  box-shadow: 0 0 8px rgba(168, 85, 247, 0.3);
+  @apply text-purple-600;
+  border-color: var(--brand-primary);
+  background: rgba(124, 92, 252, 0.06);
 }
 
 .toolbar-btn:active {
@@ -180,52 +173,52 @@ onMounted(() => {
 
 .toolbar-divider {
   @apply w-px h-5 mx-2;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border-color);
 }
 
 .editor-stats {
-  @apply flex items-center gap-2 ml-auto text-xs text-slate-500;
+  @apply flex items-center gap-2 ml-auto text-xs text-gray-400;
 }
 
 .stat {
-  @apply text-xs text-slate-500;
+  @apply text-xs text-gray-400;
 }
 
 .stat-sep {
-  @apply text-slate-600;
+  @apply text-gray-300;
 }
 
 /* Editor content */
 .editor-content {
-  @apply flex-1 p-4 text-sm text-slate-200 leading-relaxed overflow-y-auto outline-none;
+  @apply flex-1 p-4 text-sm text-gray-800 leading-relaxed overflow-y-auto outline-none;
   min-height: 120px;
   max-height: 300px;
 }
 
 .editor-content:empty::before {
   content: attr(data-placeholder);
-  @apply text-slate-600;
+  @apply text-gray-300;
   pointer-events: none;
 }
 
 .editor-content :deep(h3) {
-  @apply text-base font-bold text-purple-300 mb-2;
-  text-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
+  @apply text-base font-bold text-purple-700 mb-2;
 }
 
 .editor-content :deep(b),
 .editor-content :deep(strong) {
-  @apply font-bold text-cyan-300;
+  @apply font-bold text-gray-900;
 }
 
 .editor-content :deep(i),
 .editor-content :deep(em) {
-  @apply italic text-purple-200;
+  @apply italic text-gray-600;
 }
 
 /* Footer for readonly mode */
 .editor-footer {
-  @apply flex items-center gap-2 px-3 py-2 border-t border-white/10;
-  background: rgba(15, 15, 25, 0.4);
+  @apply flex items-center gap-2 px-3 py-2 border-t;
+  border-color: var(--border-color);
+  background: var(--bg-muted);
 }
 </style>
