@@ -307,6 +307,79 @@ async function saveTags() {
 <style scoped>
 @reference "tailwindcss";
 
+/* Base Container */
+.asset-management {
+  background-color: #0f0e17;
+  color: #ffffff;
+}
+
+/* Page Header */
+.page-header {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(34, 211, 238, 0.1));
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.page-header:hover {
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.15), 0 0 20px rgba(34, 211, 238, 0.1);
+  border-color: rgba(168, 85, 247, 0.4);
+}
+
+.page-title {
+  text-shadow: 0 0 10px rgba(168, 85, 247, 0.4);
+}
+
+/* Glass Morphism */
+.glass-morphism {
+  background: rgba(26, 22, 37, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s ease;
+}
+
+.glass-morphism:hover {
+  border-color: rgba(34, 211, 238, 0.3);
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.15), inset 0 0 20px rgba(34, 211, 238, 0.05);
+}
+
+/* Upload Config */
+.config-toggle {
+  transition: all 0.3s ease;
+}
+.config-toggle:hover {
+  color: #22d3ee;
+  text-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+}
+.config-fields {
+  background: linear-gradient(135deg, rgba(30, 27, 46, 0.8), rgba(26, 22, 37, 0.9));
+  border-top: 1px solid rgba(34, 211, 238, 0.2);
+}
+
+/* Upload Status */
+.upload-status {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(34, 211, 238, 0.05));
+  border-left: 2px solid #a855f7;
+  animation: breathe-glow 3s infinite alternate;
+}
+@keyframes breathe-glow {
+  0% { box-shadow: 0 0 5px rgba(168, 85, 247, 0.1); }
+  100% { box-shadow: 0 0 15px rgba(168, 85, 247, 0.3), 0 0 10px rgba(34, 211, 238, 0.2); }
+}
+.video-status-list > div {
+  border: 1px solid transparent;
+  transition: all 0.3s ease;
+}
+.video-status-list > div:hover {
+  background: rgba(168, 85, 247, 0.1);
+  border-color: rgba(168, 85, 247, 0.3);
+}
+
+/* Grid */
 .grid-cols-asset {
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 }
@@ -317,20 +390,87 @@ async function saveTags() {
 .asset-grid-container::-webkit-scrollbar {
   display: none;
 }
+
+/* Skeleton */
 .skeleton {
-  background: linear-gradient(90deg, #334155 25%, #475569 50%, #334155 75%);
+  background: linear-gradient(90deg, #1a1625 25%, #1e1b2e 50%, #1a1625 75%);
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s ease-in-out infinite;
+  border: 1px solid rgba(168, 85, 247, 0.1);
 }
 @keyframes skeleton-loading {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Transitions */
 .fade-slide-enter-active, .fade-slide-leave-active {
   transition: all 0.3s ease;
 }
 .fade-slide-enter-from, .fade-slide-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+/* Element Plus Overrides */
+:deep(.el-input__wrapper) {
+  background-color: rgba(15, 14, 23, 0.6) !important;
+  border: 1px solid rgba(168, 85, 247, 0.3) !important;
+  box-shadow: none !important;
+  transition: all 0.3s ease !important;
+}
+:deep(.el-input__wrapper.is-focus),
+:deep(.el-input__wrapper:hover) {
+  border-color: #22d3ee !important;
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.4), inset 0 0 4px rgba(168, 85, 247, 0.2) !important;
+}
+:deep(.el-input-group__prepend) {
+  background-color: rgba(26, 22, 37, 0.8) !important;
+  border: 1px solid rgba(168, 85, 247, 0.3) !important;
+  border-right: none !important;
+  color: #a855f7 !important;
+  font-weight: bold;
+}
+:deep(.el-radio-button__inner) {
+  background-color: rgba(26, 22, 37, 0.6) !important;
+  border: 1px solid rgba(168, 85, 247, 0.3) !important;
+  color: #cbd5e1 !important;
+  transition: all 0.3s ease !important;
+}
+:deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background-color: rgba(168, 85, 247, 0.2) !important;
+  color: #22d3ee !important;
+  border-color: #a855f7 !important;
+  box-shadow: -1px 0 0 0 #a855f7, 0 0 10px rgba(168, 85, 247, 0.4) !important;
+}
+:deep(.el-dialog) {
+  background: #1a1625 !important;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(168, 85, 247, 0.2) !important;
+}
+:deep(.el-dialog__title) {
+  color: #22d3ee !important;
+  text-shadow: 0 0 8px rgba(34, 211, 238, 0.4);
+}
+:deep(.el-button) {
+  background-color: rgba(26, 22, 37, 0.8) !important;
+  border: 1px solid rgba(168, 85, 247, 0.4) !important;
+  color: #e2e8f0 !important;
+  transition: all 0.3s ease !important;
+}
+:deep(.el-button:hover) {
+  background-color: rgba(168, 85, 247, 0.15) !important;
+  border-color: #22d3ee !important;
+  color: #22d3ee !important;
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.4) !important;
+}
+:deep(.el-button--primary) {
+  background: linear-gradient(135deg, #a855f7, #7e22ce) !important;
+  border: none !important;
+  color: #ffffff !important;
+}
+:deep(.el-button--primary:hover) {
+  background: linear-gradient(135deg, #c084fc, #9333ea) !important;
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.6), 0 0 5px rgba(34, 211, 238, 0.4) !important;
 }
 </style>
