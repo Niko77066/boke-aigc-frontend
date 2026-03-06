@@ -1,18 +1,28 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Asset, AssetFilter } from '@/types'
-import { assetApi } from '@/api'
+import { assetApi, externalApi } from '@/api'
+import type { UploadVideoOptions, UploadStatusResponse, VideoStatus } from '@/api/external'
 
 export const useAssetStore = defineStore('asset', () => {
   const assets = ref<Asset[]>([])
   const loading = ref(false)
   const uploading = ref(false)
   const uploadProgress = ref(0)
+  const uploadError = ref<string | null>(null)
   const filter = ref<AssetFilter>({})
   const selectedAssets = ref<string[]>([])
   const total = ref(0)
   const page = ref(1)
   const size = ref(20)
+
+  // 外部 API 上传状态
+  const activeFolderId = ref<number | null>(null)
+  const uploadState = ref<'idle' | 'uploading' | 'processing' | 'completed' | 'partial_failed' | 'error'>('idle')
+  const videoStatuses = ref<VideoStatus[]>([])
+  const processedCount = ref(0)
+  const totalVideoCount = ref(0)
+  let pollStopper: { stop: () => void } | null = null
 
   const filteredAssets = computed(() => {
     let result = [...assets.value]
@@ -53,9 +63,11 @@ export const useAssetStore = defineStore('asset', () => {
     }
   }
 
-  async function uploadFiles(files: File[]) {
+  /** Mock 上传（保留 fallback） */
+  async function uploadFilesMock(files: File[]) {
     uploading.value = true
     uploadProgress.value = 0
+    uploadError.value = null
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]!
@@ -63,9 +75,104 @@ export const useAssetStore = defineStore('asset', () => {
         uploadProgress.value = Math.round(((i + 1) / files.length) * 100)
       }
       await fetchAssets()
+    } catch (err) {
+      uploadError.value = err instanceof Error ? err.message : '上传失败'
+      throw err
     } finally {
       uploading.value = false
       uploadProgress.value = 0
+    }
+  }
+
+  /** 真实 API 上传 + 轮询 */
+  async function uploadVideos(files: File[], options?: UploadVideoOptions) {
+    // 停止之前的轮询
+    stopPolling()
+
+    uploading.value = true
+    uploadState.value = 'uploading'
+    uploadProgress.value = 0
+    uploadError.value = null
+    videoStatuses.value = []
+    processedCount.value = 0
+    totalVideoCount.value = files.length
+
+    try {
+      const res = await externalApi.uploadVideos(files, options)
+      activeFolderId.value = res.folder_id
+      totalVideoCount.value = res.video_count
+      uploadState.value = 'processing'
+      uploading.value = false
+      uploadProgress.value = 100
+
+      // 将上传的文件加入本地 assets 列表（状态 processing）
+      files.forEach((f, idx) => {
+        assets.value.unshift({
+          id: `ext_${res.folder_id}_${idx}`,
+          name: f.name,
+          type: 'video',
+          url: '',
+          thumbnail: '',
+          tags: options?.product_name ? [options.product_name] : [],
+          status: 'processing',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          file_size: f.size,
+          width: 0,
+          height: 0,
+        })
+      })
+      total.value = assets.value.length
+
+      // 启动轮询
+      pollStopper = externalApi.pollUploadStatus(res.folder_id, handleStatusUpdate)
+    } catch (err) {
+      uploading.value = false
+      uploadState.value = 'error'
+      uploadError.value = err instanceof Error ? err.message : '上传失败'
+      throw err
+    }
+  }
+
+  function handleStatusUpdate(status: UploadStatusResponse) {
+    videoStatuses.value = status.videos
+    processedCount.value = status.completed + status.failed
+    totalVideoCount.value = status.total
+
+    // 更新本地 asset 状态
+    status.videos.forEach((v) => {
+      const localAsset = assets.value.find(
+        (a) => a.name === v.file_name && a.id.startsWith('ext_'),
+      )
+      if (localAsset) {
+        localAsset.status = v.state === 'completed' ? 'completed' : v.state === 'failed' ? 'failed' : 'processing'
+        if (v.media_id) {
+          localAsset.kb_id = v.media_id
+        }
+        localAsset.updated_at = new Date().toISOString()
+      }
+    })
+
+    if (status.state !== 'processing') {
+      uploadState.value = status.state
+      stopPolling()
+    }
+  }
+
+  function stopPolling() {
+    if (pollStopper) {
+      pollStopper.stop()
+      pollStopper = null
+    }
+  }
+
+  /** 统一入口：优先真实 API，fallback 到 mock */
+  async function uploadFiles(files: File[], options?: UploadVideoOptions) {
+    const useRealApi = Boolean(import.meta.env.VITE_API_BASE_URL)
+    if (useRealApi) {
+      await uploadVideos(files, options)
+    } else {
+      await uploadFilesMock(files)
     }
   }
 
@@ -115,11 +222,26 @@ export const useAssetStore = defineStore('asset', () => {
     selectedAssets.value = []
   }
 
+  function resetUploadState() {
+    stopPolling()
+    uploadState.value = 'idle'
+    uploadError.value = null
+    videoStatuses.value = []
+    processedCount.value = 0
+    activeFolderId.value = null
+  }
+
   return {
     assets,
     loading,
     uploading,
     uploadProgress,
+    uploadError,
+    uploadState,
+    videoStatuses,
+    processedCount,
+    totalVideoCount,
+    activeFolderId,
     filter,
     selectedAssets,
     total,
@@ -131,6 +253,7 @@ export const useAssetStore = defineStore('asset', () => {
     taggedAssets,
     fetchAssets,
     uploadFiles,
+    uploadVideos,
     updateAssetTags,
     deleteAsset,
     pollAssetStatus,
@@ -138,5 +261,6 @@ export const useAssetStore = defineStore('asset', () => {
     selectAsset,
     selectAllAssets,
     clearSelection,
+    resetUploadState,
   }
 })
