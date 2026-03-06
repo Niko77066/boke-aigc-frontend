@@ -314,17 +314,12 @@ async function saveTags() {
   color: #1A1A2E;
 }
 
-/* Page Header */
+/* Page Header — no card wrapper */
 .page-header {
-  background-color: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s ease;
-}
-
-.page-header:hover {
-  border-color: #7C5CFC;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .page-title {
