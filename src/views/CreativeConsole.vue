@@ -12,7 +12,7 @@ import { ElMessage } from 'element-plus'
 import {
   Settings, FileText, Check, ArrowRight, Pencil, X,
   Zap, Send, Loader2, StopCircle, Video, RotateCw,
-  Mic, Type, Sparkles,
+  Mic, Type, Sparkles, Film, Download,
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -79,6 +79,7 @@ function goToConfig() {
 const pipelineInput = ref('')
 const outputRef = ref<HTMLDivElement | null>(null)
 const selectedPlanIndex = ref<number | null>(null)
+const manualTaskId = ref('')
 
 const parsedPlans = computed(() => {
   if (creativeStore.pipelineRunning || !creativeStore.pipelineOutput) return []
@@ -166,6 +167,32 @@ function handlePipelineKeydown(e: KeyboardEvent) {
     } else {
       handlePipelineSend()
     }
+  }
+}
+
+// ── Video render tracking ────────────────────────────────────────
+const renderDotClass = computed(() => {
+  const s = creativeStore.videoRenderStatus?.status
+  if (s === 'success') return 'dot-success'
+  if (s === 'failed') return 'dot-error'
+  if (s === 'processing') return 'dot-processing'
+  return 'dot-pending'
+})
+
+const renderStatusLabel = computed(() => {
+  const st = creativeStore.videoRenderStatus
+  if (!st) return '等待中'
+  if (st.status === 'success') return '渲染完成 ✅'
+  if (st.status === 'failed') return `渲染失败: ${st.error || '未知错误'}`
+  if (st.status === 'processing') return `渲染中${st.progress != null ? ` ${st.progress}%` : '...'}`
+  return `状态: ${st.status}`
+})
+
+function handleManualTrack() {
+  const tid = manualTaskId.value.trim()
+  if (tid) {
+    creativeStore.trackVideoTask(tid)
+    manualTaskId.value = ''
   }
 }
 </script>
@@ -408,6 +435,60 @@ function handlePipelineKeydown(e: KeyboardEvent) {
                 <Check :size="16" />
                 <span>视频制作流程已完成，请查看上方输出了解详情</span>
               </div>
+
+              <!-- Video render tracking panel -->
+              <div v-if="creativeStore.videoTaskId || creativeStore.videoPolling" class="render-panel mt-4 p-4 rounded-xl border border-purple-200 bg-purple-50/50">
+                <div class="flex items-center gap-2 mb-3">
+                  <Film :size="18" class="text-purple-500" />
+                  <span class="font-semibold text-sm text-purple-700">视频渲染状态</span>
+                  <span v-if="creativeStore.videoPolling" class="ml-auto text-xs text-purple-400 animate-pulse">轮询中...</span>
+                </div>
+
+                <div v-if="creativeStore.videoRenderStatus" class="render-status">
+                  <div class="flex items-center gap-2 mb-2">
+                    <span class="status-dot" :class="renderDotClass" />
+                    <span class="text-sm font-medium">{{ renderStatusLabel }}</span>
+                  </div>
+
+                  <!-- Progress bar -->
+                  <div v-if="creativeStore.videoRenderStatus.progress != null" class="w-full bg-gray-200 rounded-full h-2 mb-3">
+                    <div class="bg-purple-500 h-2 rounded-full transition-all duration-500" :style="{ width: `${creativeStore.videoRenderStatus.progress}%` }" />
+                  </div>
+
+                  <!-- Download link -->
+                  <div v-if="creativeStore.videoRenderStatus.video_url" class="mt-3">
+                    <a
+                      :href="creativeStore.videoRenderStatus.video_url"
+                      target="_blank"
+                      class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-medium"
+                    >
+                      <Download :size="16" />
+                      下载成片
+                    </a>
+                  </div>
+
+                  <!-- Error -->
+                  <div v-if="creativeStore.videoRenderStatus.error" class="mt-2 text-sm text-red-500">
+                    {{ creativeStore.videoRenderStatus.error }}
+                  </div>
+                </div>
+
+                <!-- Manual task_id input -->
+                <div v-if="!creativeStore.videoPolling && !creativeStore.videoRenderStatus?.video_url" class="mt-3 flex gap-2">
+                  <input
+                    v-model="manualTaskId"
+                    class="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-purple-300"
+                    placeholder="输入 task_id 手动查询..."
+                  />
+                  <button
+                    class="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200 transition"
+                    :disabled="!manualTaskId.trim()"
+                    @click="handleManualTrack"
+                  >
+                    查询
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -591,6 +672,23 @@ function handlePipelineKeydown(e: KeyboardEvent) {
 
 .video-done-banner {
   @apply flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium;
+}
+
+/* ── Render panel ─────────────────────────────────── */
+.render-panel {
+  animation: fadeIn 0.3s ease;
+}
+.status-dot {
+  @apply w-2.5 h-2.5 rounded-full;
+}
+.dot-success { @apply bg-emerald-500; }
+.dot-error { @apply bg-red-500; }
+.dot-processing { @apply bg-amber-500 animate-pulse; }
+.dot-pending { @apply bg-gray-400; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Chat input ───────────────────────────────────── */

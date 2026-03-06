@@ -8,6 +8,12 @@ import {
   type VoiceOption,
   type SubtitleOption,
 } from '@/api/pipeline'
+import {
+  extractTaskId,
+  extractDraftId,
+  pollVideoTask,
+  type VideoTaskStatus,
+} from '@/api/capcut'
 import { KB_ID } from '@/utils/constants'
 
 export const useCreativeStore = defineStore('creative', () => {
@@ -29,6 +35,12 @@ export const useCreativeStore = defineStore('creative', () => {
   const pipelineScript = ref('')      // selected copy text for video mode
   const pipelineError = ref<string | null>(null)
   const pipelineVideoStarted = ref(false)
+
+  // ── Video render tracking (CapCut MCP) ────────────────────────
+  const videoTaskId = ref<string | null>(null)
+  const videoDraftId = ref<string | null>(null)
+  const videoRenderStatus = ref<VideoTaskStatus | null>(null)
+  const videoPolling = ref(false)
 
   let abortController: AbortController | null = null
 
@@ -172,6 +184,8 @@ export const useCreativeStore = defineStore('creative', () => {
         pipelineOutput.value = fullText
         if (chatId) pipelineChatId.value = chatId
         pipelineRunning.value = false
+        // Auto-detect task_id/draft_id and start render polling
+        autoDetectAndPoll(fullText)
       },
       (err) => {
         pipelineError.value = err.message
@@ -235,6 +249,53 @@ export const useCreativeStore = defineStore('creative', () => {
     pipelineScript.value = ''
     pipelineError.value = null
     pipelineVideoStarted.value = false
+    videoTaskId.value = null
+    videoDraftId.value = null
+    videoRenderStatus.value = null
+    videoPolling.value = false
+  }
+
+  /** Auto-detect task_id / draft_id from pipeline video output and start polling */
+  function autoDetectAndPoll(text: string) {
+    const tid = extractTaskId(text)
+    const did = extractDraftId(text)
+    if (tid) videoTaskId.value = tid
+    if (did) videoDraftId.value = did
+    if (tid) {
+      startVideoPolling(tid)
+    }
+  }
+
+  /** Poll CapCut render task until complete */
+  async function startVideoPolling(taskId: string) {
+    if (videoPolling.value) return
+    videoPolling.value = true
+
+    try {
+      const final = await pollVideoTask(
+        taskId,
+        (status) => {
+          videoRenderStatus.value = status
+        },
+        5000,
+        300000,
+      )
+      videoRenderStatus.value = final
+    } catch (e) {
+      videoRenderStatus.value = {
+        task_id: taskId,
+        status: 'failed',
+        error: e instanceof Error ? e.message : String(e),
+      }
+    } finally {
+      videoPolling.value = false
+    }
+  }
+
+  /** Manually set a task_id and start polling (for copy-paste or manual entry) */
+  function trackVideoTask(taskId: string) {
+    videoTaskId.value = taskId
+    startVideoPolling(taskId)
   }
 
   return {
@@ -265,5 +326,11 @@ export const useCreativeStore = defineStore('creative', () => {
     sendFollowUp,
     abortPipeline,
     resetPipeline,
+    // video render tracking
+    videoTaskId,
+    videoDraftId,
+    videoRenderStatus,
+    videoPolling,
+    trackVideoTask,
   }
 })
