@@ -172,9 +172,10 @@ function goToConfig() {
   box-shadow: var(--shadow-md);
 }
 
-/* Panel header: light gray bg */
+/* Panel header: subtle purple tint */
 .panel-header {
-  @apply flex items-center gap-2 px-4 py-3 bg-gray-50 border-b border-gray-200 text-gray-800;
+  @apply flex items-center gap-2 px-4 py-3 border-b border-gray-100 text-gray-700;
+  background: linear-gradient(135deg, #FAFAFF 0%, #F8F7F4 100%);
 }
 
 /* Action Bar */

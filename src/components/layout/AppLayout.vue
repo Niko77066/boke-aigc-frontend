@@ -32,7 +32,7 @@ const uiStore = useUIStore()
 
 @media (min-width: 768px) {
   .app-layout {
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 260px 1fr;
     grid-template-rows: 64px 1fr;
     grid-template-areas:
       "header header"
@@ -48,5 +48,6 @@ const uiStore = useUIStore()
 
 .main-content {
   min-height: 100%;
+  padding: 0;
 }
 </style>

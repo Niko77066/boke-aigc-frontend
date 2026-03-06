@@ -55,16 +55,18 @@ function goToStep(stepRoute: string) {
       <div class="logo flex items-center gap-3 cursor-pointer transition-all hover:opacity-80" @click="router.push('/')">
         <img src="/boke-logo.png" alt="波克城市" class="h-8 w-auto" />
         <span class="logo-text text-lg font-bold text-gray-900">
-          波克 AIGC
+          波克城市
         </span>
+        <span class="logo-sub text-xs text-gray-400 font-medium ml-1">AIGC</span>
       </div>
     </div>
 
     <nav class="header-steps hidden md:flex items-center">
+      <!-- Simplified: show current step only as breadcrumb -->
       <div
         v-for="(s, idx) in steps"
         :key="s.step"
-        class="step-item flex items-center gap-2 px-4 py-2 rounded-full cursor-pointer transition-all"
+        class="step-item flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer transition-all text-xs"
         :class="{
           'active-step': isStepActive(s.step),
           'completed-step': isStepCompleted(s.step),
@@ -72,13 +74,13 @@ function goToStep(stepRoute: string) {
         @click="goToStep(s.route)"
       >
         <div
-          class="step-indicator w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all"
+          class="step-indicator w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold border transition-all"
         >
-          <Check v-if="isStepCompleted(s.step)" :size="14" />
+          <Check v-if="isStepCompleted(s.step)" :size="12" />
           <span v-else>{{ s.step }}</span>
         </div>
-        <span class="step-label text-sm font-medium">{{ s.name }}</span>
-        <ArrowRight v-if="idx < steps.length - 1" class="step-arrow text-gray-300 mx-2" :size="12" />
+        <span class="step-label font-medium">{{ s.name }}</span>
+        <ArrowRight v-if="idx < steps.length - 1" class="step-arrow text-gray-300 mx-1" :size="10" />
       </div>
     </nav>
 
@@ -125,6 +127,7 @@ function goToStep(stepRoute: string) {
 
 .step-indicator {
   border-color: var(--border-color);
+  border-width: 1.5px;
 }
 
 .completed-step .step-indicator {
