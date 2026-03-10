@@ -91,27 +91,40 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
-    if: ${{ secrets.SEALOS_KUBECONFIG != '' }}
     env:
       APP_NAME: ${{ needs.build.outputs.app_name }}
       IMAGE_REF: ${{ needs.build.outputs.image_ref }}
       NAMESPACE: ${{ needs.build.outputs.namespace }}
       HOST: ${{ needs.build.outputs.host }}
       API_BASE_URL: ${{ needs.build.outputs.api_base_url }}
+      SEALOS_KUBECONFIG: ${{ secrets.SEALOS_KUBECONFIG }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check deploy prerequisites
+        id: deploy_check
+        run: |
+          if [ -n "${SEALOS_KUBECONFIG}" ]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "SEALOS_KUBECONFIG is not configured; skipping deploy job."
+          fi
+
       - name: Set up kubectl
+        if: steps.deploy_check.outputs.enabled == 'true'
         uses: azure/setup-kubectl@v4
 
       - name: Write kubeconfig
+        if: steps.deploy_check.outputs.enabled == 'true'
         run: |
           mkdir -p "${HOME}/.kube"
-          printf '%s' "${{ secrets.SEALOS_KUBECONFIG }}" > "${HOME}/.kube/config"
+          printf '%s' "${SEALOS_KUBECONFIG}" > "${HOME}/.kube/config"
           chmod 600 "${HOME}/.kube/config"
 
       - name: Render manifests
+        if: steps.deploy_check.outputs.enabled == 'true'
         run: |
           mkdir -p .rendered
           export APP_NAME IMAGE_REF NAMESPACE HOST API_BASE_URL
@@ -125,6 +138,7 @@ jobs:
           fi
 
       - name: Apply manifests
+        if: steps.deploy_check.outputs.enabled == 'true'
         run: |
           kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
           kubectl apply -f .rendered/deployment.yaml
