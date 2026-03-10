@@ -6,7 +6,6 @@ import { useWorkflowStore } from '@/stores/workflow'
 import {
   getDraftTracks,
   extractAllTaskIds,
-  extractDraftId,
   extractVideoUrls,
   type DraftInfo,
 } from '@/api/capcut'
@@ -44,59 +43,92 @@ const fallbackVideoUrls = computed(() => {
 })
 
 const autoDetectedTaskIds = computed(() => extractAllTaskIds(creativeStore.pipelineOutput))
-const autoDetectedDraftId = computed(() => extractDraftId(creativeStore.pipelineOutput))
-const hasVideos = computed(() => successVideos.value.length > 0 || fallbackVideoUrls.value.length > 0)
+const expectedVideoCount = computed(() => {
+  return Math.max(
+    trackedTasks.value.length,
+    autoDetectedTaskIds.value.length,
+    successVideos.value.length,
+    fallbackVideoUrls.value.length,
+    creativeStore.pipelineVideoStarted ? 2 : 0,
+  )
+})
+const hasVideos = computed(() => {
+  if (expectedVideoCount.value === 0) {
+    return successVideos.value.length > 0 || fallbackVideoUrls.value.length > 0
+  }
+  if (successVideos.value.length > 0) {
+    return successVideos.value.length >= expectedVideoCount.value
+  }
+  return fallbackVideoUrls.value.length >= expectedVideoCount.value
+})
+const deliveredVideoCount = computed(() => {
+  return successVideos.value.length || fallbackVideoUrls.value.length
+})
+const renderTaskCount = computed(() => {
+  return trackedTasks.value.length || autoDetectedTaskIds.value.length
+})
+const renderCompletedCount = computed(() => {
+  return trackedTasks.value.filter((task) => task.status === 'success').length
+})
+const renderSettled = computed(() => {
+  return renderTaskCount.value > 0 && creativeStore.videoAllDone
+})
+const isRendering = computed(() => {
+  if (hasVideos.value) return false
+  return creativeStore.pipelineVideoStarted
+    || creativeStore.pipelineRunning
+    || renderTaskCount.value > 0
+})
 
-// ── Manual task_id input ─────────────────────────────────────────
-const manualTaskId = ref('')
-const manualDraftId = ref('')
+function getTaskProgress(task: { status: string; progress?: number }): number {
+  if (task.status === 'success' || task.status === 'failed') return 100
+  if (typeof task.progress === 'number') {
+    return Math.max(0, Math.min(99, Math.round(task.progress)))
+  }
+  if (task.status === 'processing') return 45
+  return 10
+}
+
+const overallProgress = computed(() => {
+  if (hasVideos.value) return 100
+  if (trackedTasks.value.length > 0) {
+    const total = trackedTasks.value.reduce((sum, task) => sum + getTaskProgress(task), 0)
+    const average = Math.max(5, Math.round(total / trackedTasks.value.length))
+    return renderSettled.value ? 100 : Math.min(95, average)
+  }
+  if (renderTaskCount.value > 0) return 15
+  if (creativeStore.pipelineVideoStarted) return creativeStore.pipelineRunning ? 8 : 12
+  return 0
+})
+
+const progressTitle = computed(() => {
+  if (renderSettled.value && deliveredVideoCount.value < expectedVideoCount.value) {
+    return '渲染失败'
+  }
+  if (renderTaskCount.value > 0) {
+    return '视频正在渲染'
+  }
+  if (creativeStore.pipelineVideoStarted) {
+    return '正在准备渲染任务'
+  }
+  return '正在处理中'
+})
+
+const progressDescription = computed(() => {
+  if (renderSettled.value && deliveredVideoCount.value < expectedVideoCount.value) {
+    return `渲染任务已结束，但只拿到 ${deliveredVideoCount.value}/${expectedVideoCount.value} 个成片，请重新制作。`
+  }
+  if (renderTaskCount.value > 0) {
+    return `已完成 ${renderCompletedCount.value}/${expectedVideoCount.value || renderTaskCount.value} 个视频渲染，请稍候，完成后会自动展示成片。`
+  }
+  return '系统正在接收渲染任务并同步进度，请稍候。'
+})
 
 function parseTaskIds(value: string): string[] {
   return value
     .split(/[\s,，]+/)
     .map((item) => item.trim())
     .filter(Boolean)
-}
-
-function resolveTaskIds(value: string): string[] {
-  const extracted = extractAllTaskIds(value)
-  return extracted.length > 0 ? extracted : parseTaskIds(value)
-}
-
-function resolveDraftId(...values: string[]): string {
-  const combined = values.filter(Boolean).join('\n')
-  return extractDraftId(combined) || values.map((value) => value.trim()).find(Boolean) || ''
-}
-
-async function handleManualTrack() {
-  const taskIds = resolveTaskIds(manualTaskId.value)
-  const draftId = resolveDraftId(manualTaskId.value, manualDraftId.value)
-
-  if (draftId) {
-    creativeStore.setVideoDraftId(draftId)
-    await loadDraftInfo()
-  }
-
-  for (const tid of taskIds) {
-    creativeStore.trackVideoTask(tid)
-  }
-
-  manualTaskId.value = ''
-  manualDraftId.value = ''
-}
-
-async function handleQuickTrack(
-  taskIds: string[] = autoDetectedTaskIds.value,
-  draftId: string = autoDetectedDraftId.value || '',
-) {
-  if (draftId) {
-    creativeStore.setVideoDraftId(draftId)
-    await loadDraftInfo()
-  }
-
-  for (const taskId of taskIds) {
-    creativeStore.trackVideoTask(taskId)
-  }
 }
 
 function restoreFromRouteQuery() {
@@ -185,6 +217,15 @@ watch(
     }
   },
 )
+
+watch(
+  hasVideos,
+  (value, previousValue) => {
+    if (value && !previousValue) {
+      triggerConfetti()
+    }
+  },
+)
 </script>
 
 <template>
@@ -200,22 +241,84 @@ watch(
     <!-- Main content -->
     <div class="results-section glass-morphism flex-1 flex flex-col rounded-2xl overflow-hidden p-6">
       <!-- Failure notice -->
-      <div v-if="failedVideos.length > 0" class="failure-notice mb-4">
+      <div v-if="failedVideos.length > 0 && hasVideos" class="failure-notice mb-4">
         <AlertTriangle :size="16" />
         <span>{{ failedVideos.length }} 个视频渲染失败</span>
       </div>
 
+      <div v-if="isRendering" class="render-progress-state">
+        <div class="render-progress-card">
+          <div class="render-progress-head">
+            <div class="render-progress-copy">
+              <div class="render-progress-kicker">
+                <Loader2 :size="14" class="animate-spin" />
+                AI 正在处理
+              </div>
+              <h2 class="render-progress-title">{{ progressTitle }}</h2>
+              <p class="render-progress-desc">{{ progressDescription }}</p>
+            </div>
+            <div class="render-progress-percent">{{ overallProgress }}%</div>
+          </div>
+
+          <div class="progress-track">
+            <div class="progress-fill" :style="{ width: `${overallProgress}%` }"></div>
+          </div>
+
+          <div v-if="renderTaskCount > 0" class="render-task-grid">
+            <div
+              v-for="(task, idx) in trackedTasks"
+              :key="task.task_id"
+              class="render-task-card"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <div class="text-sm font-semibold text-gray-800">视频 {{ idx + 1 }}</div>
+                  <div class="text-xs text-gray-500 mt-1">
+                    {{
+                      task.status === 'success'
+                        ? '渲染完成，正在准备展示'
+                        : task.status === 'failed'
+                          ? '渲染失败'
+                          : '正在渲染中'
+                    }}
+                  </div>
+                </div>
+                <div class="render-task-percent">{{ getTaskProgress(task) }}%</div>
+              </div>
+              <div class="progress-track is-small mt-3">
+                <div class="progress-fill" :style="{ width: `${getTaskProgress(task)}%` }"></div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="render-progress-placeholder">
+            系统正在接收渲染任务，完成后会自动展示视频成片。
+          </div>
+
+          <div v-if="renderSettled && deliveredVideoCount < expectedVideoCount" class="mt-6 flex justify-center">
+            <el-button type="primary" @click="startOver">
+              <RotateCw :size="16" class="mr-1" />
+              重新制作
+            </el-button>
+          </div>
+        </div>
+      </div>
+
       <!-- Video cards -->
-      <div v-if="hasVideos" class="video-grid">
+      <div v-else-if="hasVideos" class="video-grid">
         <div class="flex items-center gap-2 mb-4">
           <Film :size="20" class="text-purple-500" />
           <h3 class="text-lg font-semibold text-gray-900">AI 产线成片</h3>
           <span class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full font-medium ml-auto">
-            {{ successVideos.length }} 个视频
+            {{ deliveredVideoCount }} 个视频
           </span>
         </div>
 
-        <div class="grid gap-6" :class="successVideos.length >= 2 ? 'grid-cols-2' : 'grid-cols-1 max-w-2xl'">
+        <div
+          v-if="successVideos.length > 0"
+          class="grid gap-6"
+          :class="successVideos.length >= 2 ? 'grid-cols-2' : 'grid-cols-1 max-w-2xl'"
+        >
           <div
             v-for="(vid, idx) in successVideos"
             :key="vid.task_id"
@@ -253,59 +356,14 @@ watch(
                 新窗口播放
               </a>
             </div>
-            <div class="text-xs text-gray-400 mt-2">task_id: {{ vid.task_id }}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Draft info card -->
-      <div v-if="creativeStore.videoDraftId" class="draft-section mt-6">
-        <div class="flex items-center gap-2 mb-3">
-          <Layers :size="18" class="text-purple-500" />
-          <h3 class="text-base font-semibold text-gray-900">剪映草稿信息</h3>
-        </div>
-
-        <div v-if="draftLoading" class="flex items-center gap-2 text-sm text-gray-500">
-          <Loader2 :size="16" class="animate-spin" />
-          加载草稿信息中...
-        </div>
-
-        <div v-else-if="draftError" class="text-sm text-red-500">
-          草稿信息加载失败: {{ draftError }}
-        </div>
-
-        <div v-else-if="draftInfo" class="draft-card">
-          <div class="text-xs text-gray-500 mb-3">草稿 ID: {{ draftInfo.draft_id }}</div>
-          <div class="tracks-grid">
-            <div
-              v-for="track in draftInfo.tracks"
-              :key="track.name"
-              class="track-item"
-            >
-              <div class="track-name">{{ track.name }}</div>
-              <div class="track-meta">
-                <span>类型: {{ track.type }}</span>
-                <span>片段: {{ track.segment_count }}</span>
-                <span v-if="track.end_time">时长: {{ formatDuration(track.end_time) }}</span>
-                <span v-if="track.muted" class="text-orange-500">已静音</span>
-              </div>
-            </div>
           </div>
         </div>
 
-        <div v-else class="text-sm text-gray-400">暂无草稿详情</div>
-      </div>
-
-      <!-- Fallback: videos extracted from output text -->
-      <div v-if="!successVideos.length && fallbackVideoUrls.length > 0" class="video-grid">
-        <div class="flex items-center gap-2 mb-4">
-          <Film :size="20" class="text-purple-500" />
-          <h3 class="text-lg font-semibold text-gray-900">AI 产线成片</h3>
-          <span class="text-xs bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-medium ml-auto">
-            从输出中提取
-          </span>
-        </div>
-        <div class="grid gap-6" :class="fallbackVideoUrls.length >= 2 ? 'grid-cols-2' : 'grid-cols-1 max-w-2xl'">
+        <div
+          v-else
+          class="grid gap-6"
+          :class="fallbackVideoUrls.length >= 2 ? 'grid-cols-2' : 'grid-cols-1 max-w-2xl'"
+        >
           <div v-for="(url, idx) in fallbackVideoUrls" :key="url" class="video-card">
             <div class="video-label">
               <span class="text-xs font-bold text-purple-600">视频 {{ idx + 1 }}</span>
@@ -315,115 +373,54 @@ watch(
               <a :href="url" target="_blank" download class="action-btn primary">
                 <Download :size="14" /> 下载成片
               </a>
+              <a :href="url" target="_blank" class="action-btn secondary">
+                <ExternalLink :size="14" /> 新窗口播放
+              </a>
             </div>
           </div>
         </div>
-      </div>
 
-      <div
-        v-if="!hasVideos && trackedTasks.length > 0"
-        class="manual-query mt-6 p-4 rounded-xl border border-gray-200 bg-gray-50/50"
-      >
-        <div class="flex items-center justify-between gap-4 mb-3">
-          <div>
-            <div class="text-sm font-medium text-gray-700">已自动识别渲染任务</div>
-            <div class="text-xs text-gray-500 mt-1">系统会自动轮询这些任务，不需要再从回复里复制 task_id</div>
+        <!-- Draft info card -->
+        <div v-if="creativeStore.videoDraftId" class="draft-section mt-6">
+          <div class="flex items-center gap-2 mb-3">
+            <Layers :size="18" class="text-purple-500" />
+            <h3 class="text-base font-semibold text-gray-900">剪映草稿信息</h3>
           </div>
-          <button
-            class="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200 transition font-medium"
-            @click="handleQuickTrack(creativeStore.videoTaskIds, creativeStore.videoDraftId || autoDetectedDraftId || '')"
-          >
-            重新查询全部
-          </button>
-        </div>
 
-        <div class="task-status-grid">
-          <div
-            v-for="task in trackedTasks"
-            :key="task.task_id"
-            class="task-status-item"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <div class="text-xs text-gray-400">task_id</div>
-                <div class="text-sm font-medium text-gray-800 break-all">{{ task.task_id }}</div>
-              </div>
-              <div class="task-status-badge" :class="`is-${task.status}`">
-                <Loader2 v-if="task.status === 'processing' || task.status === 'pending'" :size="12" class="animate-spin" />
-                <CheckCircle2 v-else-if="task.status === 'success'" :size="12" />
-                <AlertTriangle v-else-if="task.status === 'failed'" :size="12" />
-                <span>
-                  {{
-                    task.status === 'processing' || task.status === 'pending'
-                      ? '渲染中'
-                      : task.status === 'success'
-                        ? '已完成'
-                        : task.status === 'failed'
-                          ? '失败'
-                          : task.status
-                  }}
-                </span>
+          <div v-if="draftLoading" class="flex items-center gap-2 text-sm text-gray-500">
+            <Loader2 :size="16" class="animate-spin" />
+            加载草稿信息中...
+          </div>
+
+          <div v-else-if="draftError" class="text-sm text-red-500">
+            草稿信息加载失败: {{ draftError }}
+          </div>
+
+          <div v-else-if="draftInfo" class="draft-card">
+            <div class="text-xs text-gray-500 mb-3">草稿 ID: {{ draftInfo.draft_id }}</div>
+            <div class="tracks-grid">
+              <div
+                v-for="track in draftInfo.tracks"
+                :key="track.name"
+                class="track-item"
+              >
+                <div class="track-name">{{ track.name }}</div>
+                <div class="track-meta">
+                  <span>类型: {{ track.type }}</span>
+                  <span>片段: {{ track.segment_count }}</span>
+                  <span v-if="track.end_time">时长: {{ formatDuration(track.end_time) }}</span>
+                  <span v-if="track.muted" class="text-orange-500">已静音</span>
+                </div>
               </div>
             </div>
-            <div v-if="task.message || task.error" class="text-xs text-gray-500 mt-2 break-all">
-              {{ task.message || task.error }}
-            </div>
           </div>
-        </div>
-      </div>
 
-      <div
-        v-else-if="!hasVideos && autoDetectedTaskIds.length > 0"
-        class="manual-query mt-6 p-4 rounded-xl border border-gray-200 bg-gray-50/50"
-      >
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <div class="text-sm font-medium text-gray-700">检测到 {{ autoDetectedTaskIds.length }} 个渲染任务</div>
-            <div class="text-xs text-gray-500 mt-1">点击一次即可开始查询，无需手动复制 task_id</div>
-          </div>
-          <button
-            class="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200 transition font-medium"
-            @click="handleQuickTrack()"
-          >
-            一键查询
-          </button>
+          <div v-else class="text-sm text-gray-400">暂无草稿详情</div>
         </div>
-      </div>
-
-      <!-- Manual task_id query -->
-      <div v-if="!hasVideos" class="manual-query mt-6 p-4 rounded-xl border border-gray-200 bg-gray-50/50">
-        <div class="text-sm font-medium text-gray-700 mb-2">兜底查询</div>
-        <div class="text-xs text-gray-500 mb-3">支持直接粘贴整段回复内容，系统会自动识别 task_id 和 draft_id</div>
-        <div class="flex gap-2 items-start">
-          <textarea
-            v-model="manualTaskId"
-            rows="3"
-            class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-purple-300 focus:outline-none resize-y"
-            placeholder="支持直接粘贴整段回复，或输入多个 task_id（逗号/空格分隔）..."
-          />
-          <input
-            v-model="manualDraftId"
-            class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-purple-300 focus:outline-none"
-            placeholder="可选：输入 draft_id 直接恢复草稿"
-          />
-          <button
-            class="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200 transition font-medium"
-            :disabled="!manualTaskId.trim() && !manualDraftId.trim()"
-            @click="handleManualTrack"
-          >
-            查询
-          </button>
-        </div>
-      </div>
-
-      <!-- Pipeline output text (when no videos found) -->
-      <div v-if="!hasVideos && creativeStore.pipelineOutput" class="pipeline-output mt-4 p-4 rounded-xl border border-gray-200 bg-white">
-        <div class="text-sm font-medium text-gray-700 mb-2">Pipeline 输出内容</div>
-        <pre class="text-xs text-gray-600 whitespace-pre-wrap max-h-60 overflow-y-auto">{{ creativeStore.pipelineOutput }}</pre>
       </div>
 
       <!-- No results -->
-      <div v-if="!hasVideos && failedVideos.length === 0 && !creativeStore.pipelineOutput" class="empty-results">
+      <div v-else class="empty-results">
         <Video :size="64" class="text-gray-300" />
         <h2 class="text-xl font-semibold text-gray-700 mt-4">暂无渲染结果</h2>
         <p class="text-gray-500 mt-2 mb-4">请先完成创意生成与视频制作</p>
@@ -437,7 +434,7 @@ watch(
     <div v-if="hasVideos" class="action-bar glass-morphism flex items-center justify-between p-4 rounded-2xl">
       <div class="success-count flex items-center gap-2 text-sm font-medium text-emerald-600">
         <CheckCircle2 :size="16" />
-        {{ successVideos.length }} 个视频渲染成功
+        {{ deliveredVideoCount }} 个视频已可查看
         <span v-if="failedVideos.length > 0" class="text-red-400 ml-2">
           ({{ failedVideos.length }} 个失败)
         </span>
@@ -475,6 +472,68 @@ watch(
   color: #FF6B6B;
 }
 
+.render-progress-state {
+  @apply flex-1 flex items-center justify-center;
+}
+
+.render-progress-card {
+  @apply w-full max-w-4xl mx-auto p-8 rounded-3xl border border-gray-200 bg-white;
+  box-shadow: 0 18px 50px rgba(124, 92, 252, 0.08);
+}
+
+.render-progress-head {
+  @apply flex items-start justify-between gap-6 mb-6;
+}
+
+.render-progress-kicker {
+  @apply inline-flex items-center gap-2 text-sm font-semibold text-purple-600 mb-3;
+}
+
+.render-progress-title {
+  @apply text-3xl font-bold text-gray-900;
+}
+
+.render-progress-desc {
+  @apply text-sm text-gray-500 mt-2 leading-6;
+}
+
+.render-progress-percent {
+  @apply text-4xl font-bold text-purple-600 shrink-0;
+}
+
+.progress-track {
+  @apply relative w-full overflow-hidden rounded-full;
+  height: 14px;
+  background: linear-gradient(90deg, #F3E8FF 0%, #F5F3FF 100%);
+}
+
+.progress-track.is-small {
+  height: 8px;
+}
+
+.progress-fill {
+  @apply h-full rounded-full;
+  background: linear-gradient(90deg, #7C3AED 0%, #A855F7 100%);
+  transition: width 0.4s ease;
+}
+
+.render-task-grid {
+  @apply grid gap-4 mt-6;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.render-task-card {
+  @apply p-4 rounded-2xl border border-gray-200 bg-gray-50;
+}
+
+.render-task-percent {
+  @apply text-lg font-semibold text-purple-600;
+}
+
+.render-progress-placeholder {
+  @apply mt-6 text-sm text-gray-500 text-center;
+}
+
 /* ── Video cards ──────────────────────────────── */
 .video-card {
   @apply p-4 rounded-2xl border border-gray-200 bg-white;
@@ -507,35 +566,6 @@ watch(
 
 .tracks-grid {
   @apply flex flex-col gap-2;
-}
-
-.task-status-grid {
-  @apply grid gap-3;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
-
-.task-status-item {
-  @apply p-3 rounded-xl border border-gray-200 bg-white;
-}
-
-.task-status-badge {
-  @apply inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium whitespace-nowrap;
-}
-
-.task-status-badge.is-pending,
-.task-status-badge.is-processing {
-  background: #F3E8FF;
-  color: #7C3AED;
-}
-
-.task-status-badge.is-success {
-  background: #DCFCE7;
-  color: #15803D;
-}
-
-.task-status-badge.is-failed {
-  background: #FEE2E2;
-  color: #DC2626;
 }
 
 .track-item {
