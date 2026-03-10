@@ -277,6 +277,9 @@ const STRONG_TASK_CONTEXT_PATTERN = /(task|render|渲染|任务)/i
 const NON_TASK_CONTEXT_PATTERN = /(draft|草稿|chat[_\s-]?id|request[_\s-]?id|kb[_\s-]?id)/i
 const CONTEXTUAL_CODE_ID_PATTERN = /`([a-zA-Z0-9_-]{8,})`/g
 const CONTEXTUAL_UUID_PATTERN = /\b([a-f0-9]{8}-[a-f0-9-]{8,})\b/gi
+const TASK_TAIL_LINE_LIMIT = 60
+const TASK_TAIL_CHAR_LIMIT = 4000
+const TASK_SECTION_MARKER_PATTERN = /(渲染状态|render status|task[_\s-]*id|任务\s*id|任务编号|\*\*v\d+\*\*|视频\s*\d+)/i
 
 function pushTaskIdCandidate(seen: Set<string>, candidate: string | undefined, context?: string) {
   if (!candidate || candidate.length < 8) return
@@ -307,11 +310,32 @@ function collectTaskIdsFromContext(text: string, seen: Set<string>) {
   }
 }
 
+function getTaskExtractionTail(text: string): string {
+  const lines = text.split('\n')
+  let startIndex = Math.max(0, lines.length - TASK_TAIL_LINE_LIMIT)
+
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (TASK_SECTION_MARKER_PATTERN.test(lines[i] || '')) {
+      startIndex = Math.max(0, i - 2)
+      break
+    }
+  }
+
+  const tailLines = lines.slice(startIndex).join('\n')
+
+  if (tailLines.length <= TASK_TAIL_CHAR_LIMIT) {
+    return tailLines
+  }
+
+  return tailLines.slice(-TASK_TAIL_CHAR_LIMIT)
+}
+
 /**
  * Extract ALL task_ids from pipeline output text.
  * The workflow may produce multiple videos, each with its own task_id.
  */
 export function extractAllTaskIds(text: string): string[] {
+  const tailText = getTaskExtractionTail(text)
   const patterns = [
     /\btask[\s_-]*id\b\s*[：:=]\s*[("'`“”‘’]*([a-zA-Z0-9_-]+)[)"'`“”‘’]*/gi,
     /task_id["\s]*[:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
@@ -332,12 +356,12 @@ export function extractAllTaskIds(text: string): string[] {
 
   const seen = new Set<string>()
   for (const p of patterns) {
-    for (const m of text.matchAll(p)) {
+    for (const m of tailText.matchAll(p)) {
       pushTaskIdCandidate(seen, m[1], m[0])
     }
   }
 
-  collectTaskIdsFromContext(text, seen)
+  collectTaskIdsFromContext(tailText, seen)
 
   return [...seen]
 }

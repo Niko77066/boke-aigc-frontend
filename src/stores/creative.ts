@@ -17,6 +17,11 @@ import {
 import { KB_ID } from '@/utils/constants'
 
 const CREATIVE_STORAGE_KEY = 'boke-aigc:creative'
+const EXPECTED_VIDEO_TASK_COUNT = 2
+
+function normalizeVideoTaskIdsList(taskIds: string[]): string[] {
+  return [...new Set(taskIds)].slice(-EXPECTED_VIDEO_TASK_COUNT)
+}
 
 interface PersistedCreativeState {
   taskConfig: TaskConfig | null
@@ -50,6 +55,12 @@ function persistState(state: PersistedCreativeState) {
 
 export const useCreativeStore = defineStore('creative', () => {
   const persisted = loadPersistedState()
+  const initialVideoTaskIds = normalizeVideoTaskIdsList(persisted?.videoTaskIds ?? [])
+  const initialVideoRenderStatuses = new Map(
+    (persisted?.videoRenderStatuses ?? [])
+      .filter((status) => initialVideoTaskIds.includes(status.task_id))
+      .map((status) => [status.task_id, status] as const),
+  )
 
   // ── Form / config state ─────────────────────────────────────────
   const taskConfig = ref<TaskConfig | null>(persisted?.taskConfig ?? null)
@@ -70,11 +81,9 @@ export const useCreativeStore = defineStore('creative', () => {
   const error = ref<string | null>(null)
 
   // ── Video render tracking (CapCut MCP) — multi task_id ──────────
-  const videoTaskIds = ref<string[]>(persisted?.videoTaskIds ?? [])
+  const videoTaskIds = ref<string[]>(initialVideoTaskIds)
   const videoDraftId = ref<string | null>(persisted?.videoDraftId ?? null)
-  const videoRenderStatuses = ref<Map<string, VideoTaskStatus>>(
-    new Map((persisted?.videoRenderStatuses ?? []).map((status) => [status.task_id, status])),
-  )
+  const videoRenderStatuses = ref<Map<string, VideoTaskStatus>>(initialVideoRenderStatuses)
   const videoPollingCount = ref(0)
   const activeVideoPolling = new Set<string>()
   const hasRecoverableResult = computed(() => {
@@ -133,6 +142,24 @@ export const useCreativeStore = defineStore('creative', () => {
     videoRenderStatuses.value = new Map()
     videoPollingCount.value = 0
     activeVideoPolling.clear()
+  }
+
+  function normalizeVideoTaskIds(taskIds: string[]): string[] {
+    return normalizeVideoTaskIdsList(taskIds)
+  }
+
+  function applyVideoTaskIds(taskIds: string[]) {
+    const normalized = normalizeVideoTaskIds(taskIds)
+    videoTaskIds.value = normalized
+
+    const nextStatuses = new Map<string, VideoTaskStatus>()
+    for (const taskId of normalized) {
+      const status = videoRenderStatuses.value.get(taskId)
+      if (status) nextStatuses.set(taskId, status)
+    }
+    videoRenderStatuses.value = nextStatuses
+
+    return normalized
   }
 
   // ── Config helpers ──────────────────────────────────────────────
@@ -298,10 +325,10 @@ export const useCreativeStore = defineStore('creative', () => {
     const tids = extractAllTaskIds(text)
     const did = extractDraftId(text)
     if (tids.length > 0) {
-      videoTaskIds.value = [...new Set([...videoTaskIds.value, ...tids])]
+      applyVideoTaskIds(tids)
     }
     if (did) videoDraftId.value = did
-    return tids
+    return normalizeVideoTaskIds(tids)
   }
 
   function autoDetectAndPoll(text: string) {
@@ -359,9 +386,7 @@ export const useCreativeStore = defineStore('creative', () => {
   }
 
   function trackVideoTask(taskId: string) {
-    if (!videoTaskIds.value.includes(taskId)) {
-      videoTaskIds.value = [...videoTaskIds.value, taskId]
-    }
+    applyVideoTaskIds([...videoTaskIds.value, taskId])
     startVideoPolling(taskId)
   }
 
@@ -376,7 +401,7 @@ export const useCreativeStore = defineStore('creative', () => {
     pipelineVideoStarted?: boolean
   }) {
     if (payload.taskIds?.length) {
-      videoTaskIds.value = [...new Set([...videoTaskIds.value, ...payload.taskIds])]
+      applyVideoTaskIds(payload.taskIds)
     }
     if (payload.draftId) {
       videoDraftId.value = payload.draftId

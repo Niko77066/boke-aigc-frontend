@@ -15,6 +15,8 @@ import {
 } from 'lucide-vue-next'
 import confetti from 'canvas-confetti'
 
+const EXPECTED_VIDEO_COUNT = 2
+
 const router = useRouter()
 const route = useRoute()
 const creativeStore = useCreativeStore()
@@ -43,19 +45,8 @@ const fallbackVideoUrls = computed(() => {
 })
 
 const autoDetectedTaskIds = computed(() => extractAllTaskIds(creativeStore.pipelineOutput))
-const expectedVideoCount = computed(() => {
-  return Math.max(
-    trackedTasks.value.length,
-    autoDetectedTaskIds.value.length,
-    successVideos.value.length,
-    fallbackVideoUrls.value.length,
-    creativeStore.pipelineVideoStarted ? 2 : 0,
-  )
-})
+const expectedVideoCount = computed(() => EXPECTED_VIDEO_COUNT)
 const hasVideos = computed(() => {
-  if (expectedVideoCount.value === 0) {
-    return successVideos.value.length > 0 || fallbackVideoUrls.value.length > 0
-  }
   if (successVideos.value.length > 0) {
     return successVideos.value.length >= expectedVideoCount.value
   }
@@ -65,7 +56,7 @@ const deliveredVideoCount = computed(() => {
   return successVideos.value.length || fallbackVideoUrls.value.length
 })
 const renderTaskCount = computed(() => {
-  return trackedTasks.value.length || autoDetectedTaskIds.value.length
+  return trackedTasks.value.length || Math.min(autoDetectedTaskIds.value.length, EXPECTED_VIDEO_COUNT)
 })
 const renderCompletedCount = computed(() => {
   return trackedTasks.value.filter((task) => task.status === 'success').length
