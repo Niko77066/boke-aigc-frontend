@@ -272,6 +272,41 @@ export function extractTaskId(text: string): string | null {
   return ids.length > 0 ? ids[0]! : null
 }
 
+const TASK_CONTEXT_PATTERN = /(task|render|渲染|任务|video|视频|版本|进度|status|处理中|完成|成功|失败|queued|processing|completed|pending)/i
+const STRONG_TASK_CONTEXT_PATTERN = /(task|render|渲染|任务)/i
+const NON_TASK_CONTEXT_PATTERN = /(draft|草稿|chat[_\s-]?id|request[_\s-]?id|kb[_\s-]?id)/i
+const CONTEXTUAL_CODE_ID_PATTERN = /`([a-zA-Z0-9_-]{8,})`/g
+const CONTEXTUAL_UUID_PATTERN = /\b([a-f0-9]{8}-[a-f0-9-]{8,})\b/gi
+
+function pushTaskIdCandidate(seen: Set<string>, candidate: string | undefined, context?: string) {
+  if (!candidate || candidate.length < 8) return
+
+  const normalized = candidate.trim()
+  if (!normalized) return
+
+  const lowerContext = context?.toLowerCase() || ''
+  if (NON_TASK_CONTEXT_PATTERN.test(lowerContext) && !STRONG_TASK_CONTEXT_PATTERN.test(lowerContext)) {
+    return
+  }
+
+  seen.add(normalized)
+}
+
+function collectTaskIdsFromContext(text: string, seen: Set<string>) {
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim()
+    if (!line || !TASK_CONTEXT_PATTERN.test(line)) continue
+
+    for (const match of line.matchAll(CONTEXTUAL_CODE_ID_PATTERN)) {
+      pushTaskIdCandidate(seen, match[1], line)
+    }
+
+    for (const match of line.matchAll(CONTEXTUAL_UUID_PATTERN)) {
+      pushTaskIdCandidate(seen, match[1], line)
+    }
+  }
+}
+
 /**
  * Extract ALL task_ids from pipeline output text.
  * The workflow may produce multiple videos, each with its own task_id.
@@ -283,6 +318,9 @@ export function extractAllTaskIds(text: string): string[] {
     /task[\s_-]*id["\s]*[：:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
     /taskId["\s]*[:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
     /-\s*\*\*[^*]+\*\*.*?task_id\s*[:：]\s*`?([a-zA-Z0-9_-]+)`?/gi,
+    /-\s*\*\*[^*]+\*\*\s*`([a-zA-Z0-9_-]{8,})`\s*(?:->|→|➡|渲染|render)/gi,
+    /\*\*[^*]+\*\*\s*`([a-zA-Z0-9_-]{8,})`\s*(?:->|→|➡|渲染|render)/gi,
+    /\(\s*task\s*id\s*[:：]\s*`?([a-zA-Z0-9_-]{8,})`?\s*\)/gi,
     /任务\s*ID[：:\s]*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
     /任务编号[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/g,
     /渲染任务[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/g,
@@ -295,9 +333,12 @@ export function extractAllTaskIds(text: string): string[] {
   const seen = new Set<string>()
   for (const p of patterns) {
     for (const m of text.matchAll(p)) {
-      if (m[1] && m[1].length >= 4) seen.add(m[1])
+      pushTaskIdCandidate(seen, m[1], m[0])
     }
   }
+
+  collectTaskIdsFromContext(text, seen)
+
   return [...seen]
 }
 
