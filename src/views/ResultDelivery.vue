@@ -3,7 +3,13 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCreativeStore } from '@/stores/creative'
 import { useWorkflowStore } from '@/stores/workflow'
-import { getDraftTracks, extractVideoUrls, type DraftInfo } from '@/api/capcut'
+import {
+  getDraftTracks,
+  extractAllTaskIds,
+  extractDraftId,
+  extractVideoUrls,
+  type DraftInfo,
+} from '@/api/capcut'
 import {
   Film, Download, ExternalLink, Video, RotateCw, CheckCircle2,
   AlertTriangle, Layers, Clock, Loader2,
@@ -21,6 +27,15 @@ const successVideos = computed(() => {
   return videoStatuses.value.filter((s) => s.status === 'success' && Boolean(s.video_url))
 })
 const failedVideos = computed(() => videoStatuses.value.filter((s) => s.status === 'failed'))
+const trackedTasks = computed(() => {
+  return creativeStore.videoTaskIds.map((taskId) => {
+    const status = creativeStore.videoRenderStatuses.get(taskId)
+    return status ?? {
+      task_id: taskId,
+      status: creativeStore.videoPollingCount > 0 ? 'processing' : 'pending',
+    }
+  })
+})
 
 // ── Fallback: extract video URLs directly from pipeline output ──
 const fallbackVideoUrls = computed(() => {
@@ -28,6 +43,8 @@ const fallbackVideoUrls = computed(() => {
   return extractVideoUrls(creativeStore.pipelineOutput)
 })
 
+const autoDetectedTaskIds = computed(() => extractAllTaskIds(creativeStore.pipelineOutput))
+const autoDetectedDraftId = computed(() => extractDraftId(creativeStore.pipelineOutput))
 const hasVideos = computed(() => successVideos.value.length > 0 || fallbackVideoUrls.value.length > 0)
 
 // ── Manual task_id input ─────────────────────────────────────────
@@ -41,9 +58,19 @@ function parseTaskIds(value: string): string[] {
     .filter(Boolean)
 }
 
+function resolveTaskIds(value: string): string[] {
+  const extracted = extractAllTaskIds(value)
+  return extracted.length > 0 ? extracted : parseTaskIds(value)
+}
+
+function resolveDraftId(...values: string[]): string {
+  const combined = values.filter(Boolean).join('\n')
+  return extractDraftId(combined) || values.map((value) => value.trim()).find(Boolean) || ''
+}
+
 async function handleManualTrack() {
-  const taskIds = parseTaskIds(manualTaskId.value)
-  const draftId = manualDraftId.value.trim()
+  const taskIds = resolveTaskIds(manualTaskId.value)
+  const draftId = resolveDraftId(manualTaskId.value, manualDraftId.value)
 
   if (draftId) {
     creativeStore.setVideoDraftId(draftId)
@@ -56,6 +83,20 @@ async function handleManualTrack() {
 
   manualTaskId.value = ''
   manualDraftId.value = ''
+}
+
+async function handleQuickTrack(
+  taskIds: string[] = autoDetectedTaskIds.value,
+  draftId: string = autoDetectedDraftId.value || '',
+) {
+  if (draftId) {
+    creativeStore.setVideoDraftId(draftId)
+    await loadDraftInfo()
+  }
+
+  for (const taskId of taskIds) {
+    creativeStore.trackVideoTask(taskId)
+  }
 }
 
 function restoreFromRouteQuery() {
@@ -279,14 +320,86 @@ watch(
         </div>
       </div>
 
+      <div
+        v-if="!hasVideos && trackedTasks.length > 0"
+        class="manual-query mt-6 p-4 rounded-xl border border-gray-200 bg-gray-50/50"
+      >
+        <div class="flex items-center justify-between gap-4 mb-3">
+          <div>
+            <div class="text-sm font-medium text-gray-700">已自动识别渲染任务</div>
+            <div class="text-xs text-gray-500 mt-1">系统会自动轮询这些任务，不需要再从回复里复制 task_id</div>
+          </div>
+          <button
+            class="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200 transition font-medium"
+            @click="handleQuickTrack(creativeStore.videoTaskIds, creativeStore.videoDraftId || autoDetectedDraftId || '')"
+          >
+            重新查询全部
+          </button>
+        </div>
+
+        <div class="task-status-grid">
+          <div
+            v-for="task in trackedTasks"
+            :key="task.task_id"
+            class="task-status-item"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="text-xs text-gray-400">task_id</div>
+                <div class="text-sm font-medium text-gray-800 break-all">{{ task.task_id }}</div>
+              </div>
+              <div class="task-status-badge" :class="`is-${task.status}`">
+                <Loader2 v-if="task.status === 'processing' || task.status === 'pending'" :size="12" class="animate-spin" />
+                <CheckCircle2 v-else-if="task.status === 'success'" :size="12" />
+                <AlertTriangle v-else-if="task.status === 'failed'" :size="12" />
+                <span>
+                  {{
+                    task.status === 'processing' || task.status === 'pending'
+                      ? '渲染中'
+                      : task.status === 'success'
+                        ? '已完成'
+                        : task.status === 'failed'
+                          ? '失败'
+                          : task.status
+                  }}
+                </span>
+              </div>
+            </div>
+            <div v-if="task.message || task.error" class="text-xs text-gray-500 mt-2 break-all">
+              {{ task.message || task.error }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-else-if="!hasVideos && autoDetectedTaskIds.length > 0"
+        class="manual-query mt-6 p-4 rounded-xl border border-gray-200 bg-gray-50/50"
+      >
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <div class="text-sm font-medium text-gray-700">检测到 {{ autoDetectedTaskIds.length }} 个渲染任务</div>
+            <div class="text-xs text-gray-500 mt-1">点击一次即可开始查询，无需手动复制 task_id</div>
+          </div>
+          <button
+            class="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200 transition font-medium"
+            @click="handleQuickTrack()"
+          >
+            一键查询
+          </button>
+        </div>
+      </div>
+
       <!-- Manual task_id query -->
       <div v-if="!hasVideos" class="manual-query mt-6 p-4 rounded-xl border border-gray-200 bg-gray-50/50">
-        <div class="text-sm font-medium text-gray-700 mb-2">手动查询渲染任务</div>
-        <div class="flex gap-2">
-          <input
+        <div class="text-sm font-medium text-gray-700 mb-2">兜底查询</div>
+        <div class="text-xs text-gray-500 mb-3">支持直接粘贴整段回复内容，系统会自动识别 task_id 和 draft_id</div>
+        <div class="flex gap-2 items-start">
+          <textarea
             v-model="manualTaskId"
-            class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-purple-300 focus:outline-none"
-            placeholder="输入 task_id，支持多个（逗号或空格分隔）..."
+            rows="3"
+            class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-purple-300 focus:outline-none resize-y"
+            placeholder="支持直接粘贴整段回复，或输入多个 task_id（逗号/空格分隔）..."
           />
           <input
             v-model="manualDraftId"
@@ -394,6 +507,35 @@ watch(
 
 .tracks-grid {
   @apply flex flex-col gap-2;
+}
+
+.task-status-grid {
+  @apply grid gap-3;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.task-status-item {
+  @apply p-3 rounded-xl border border-gray-200 bg-white;
+}
+
+.task-status-badge {
+  @apply inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium whitespace-nowrap;
+}
+
+.task-status-badge.is-pending,
+.task-status-badge.is-processing {
+  background: #F3E8FF;
+  color: #7C3AED;
+}
+
+.task-status-badge.is-success {
+  background: #DCFCE7;
+  color: #15803D;
+}
+
+.task-status-badge.is-failed {
+  background: #FEE2E2;
+  color: #DC2626;
 }
 
 .track-item {

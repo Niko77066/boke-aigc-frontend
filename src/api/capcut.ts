@@ -278,8 +278,9 @@ export function extractTaskId(text: string): string | null {
  */
 export function extractAllTaskIds(text: string): string[] {
   const patterns = [
+    /\btask[\s_-]*id\b\s*[：:=]\s*[("'`“”‘’]*([a-zA-Z0-9_-]+)[)"'`“”‘’]*/gi,
     /task_id["\s]*[:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
-    /task[\s_-]*id["\s]*[:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
+    /task[\s_-]*id["\s]*[：:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
     /taskId["\s]*[:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
     /-\s*\*\*[^*]+\*\*.*?task_id\s*[:：]\s*`?([a-zA-Z0-9_-]+)`?/gi,
     /任务\s*ID[：:\s]*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
@@ -317,7 +318,8 @@ export function extractVideoUrls(text: string): string[] {
  */
 export function extractDraftId(text: string): string | null {
   const patterns = [
-    /draft_id["\s]*[:=]\s*["']?([a-zA-Z0-9_-]+)["']?/i,
+    /\bdraft[\s_-]*id\b\s*[：:=]\s*[("'`“”‘’]*([a-zA-Z0-9_-]+)[)"'`“”‘’]*/i,
+    /draft_id["\s]*[：:=]\s*["']?([a-zA-Z0-9_-]+)["']?/i,
     /草稿ID[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/,
   ]
 

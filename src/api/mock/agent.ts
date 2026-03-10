@@ -40,6 +40,11 @@ export async function generateTimeline(
   _subtitleConfig?: VideoConfig,
   _kbId?: string,
 ): Promise<GenerateTimelineResponse> {
+  void _selectedScript
+  void _ttsConfig
+  void _subtitleConfig
+  void _kbId
+
   await delay(2000)
 
   const timelines = mockTimelines()
