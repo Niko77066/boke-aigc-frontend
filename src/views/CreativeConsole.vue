@@ -9,7 +9,7 @@ import type { TaskConfig } from '@/types'
 import { ElMessage } from 'element-plus'
 import {
   Settings, FileText, Check, Pencil, X,
-  Loader2, Video, Sparkles, StopCircle, RotateCw,
+  Loader2, Video, Sparkles, StopCircle, RotateCw, ArrowRight,
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -157,7 +157,7 @@ function scrollOutput() {
       <div>
         <h1 class="page-title text-2xl font-bold text-gray-900">创意控制台</h1>
         <p class="page-desc text-sm text-gray-500 mt-1">
-          配置营销目标与卖点，AI 生成文案方案，选择后自动制作视频并跳转成片交付
+          按新版工作流先生成 4 套文案方案，再通过按钮卡片直接推进视频制作
         </p>
       </div>
       <div class="status-pill" :class="statusCardClass">
@@ -218,9 +218,9 @@ function scrollOutput() {
           <!-- Empty state -->
           <div v-if="!creativeStore.pipelineOutput && !creativeStore.pipelineRunning && !creativeStore.pipelineError" class="empty-state">
             <Sparkles :size="48" class="text-gray-300" />
-            <h3 class="text-lg font-semibold text-gray-700 mt-4">等待生成创意文案</h3>
+            <h3 class="text-lg font-semibold text-gray-700 mt-4">等待启动文案模式</h3>
             <p class="text-sm text-gray-400 mt-1 max-w-sm text-center">
-              配置左侧参数后点击"AI 生成创意文案"，AI 将为您生成方案，选择后自动制作视频
+              配置左侧参数后点击“生成 4 套营销文案”，再选择右侧方案按钮进入视频流程
             </p>
           </div>
 
@@ -239,7 +239,7 @@ function scrollOutput() {
             <div v-if="hasParsedPlans && !creativeStore.pipelineVideoStarted" class="plans-section mt-6">
               <h4 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                 <Video :size="14" class="text-purple-500" />
-                选择一个方案启动视频制作
+                选择一个方案按钮，直接启动视频制作
               </h4>
               <div class="grid grid-cols-2 gap-3">
                 <button
@@ -249,7 +249,13 @@ function scrollOutput() {
                   :class="{ 'selected-plan': selectedPlanIndex === idx }"
                   @click="handleSelectPlan(idx)"
                 >
-                  <div class="plan-number">方案 {{ idx + 1 }}</div>
+                  <div class="plan-card__head">
+                    <div class="plan-number">方案 {{ idx + 1 }}</div>
+                    <div class="plan-cta">
+                      <span>{{ selectedPlanIndex === idx ? '制作中' : '选这套做视频' }}</span>
+                      <ArrowRight :size="14" />
+                    </div>
+                  </div>
                   <div class="plan-preview">{{ plan.slice(0, 120) }}{{ plan.length > 120 ? '...' : '' }}</div>
                 </button>
               </div>
@@ -300,11 +306,12 @@ function scrollOutput() {
         <span v-if="selectedPlanIndex !== null" class="selected-info flex items-center gap-2 text-sm font-medium text-emerald-600">
           <Check :size="16" />
           已选择方案 {{ selectedPlanIndex + 1 }}
-          <button class="text-purple-500 hover:text-purple-700 underline text-xs ml-2" @click="handleEditPlan">
-            编辑文案
+          <button class="action-link-btn ml-2" @click="handleEditPlan">
+            <Pencil :size="13" />
+            编辑当前文案
           </button>
         </span>
-        <span v-else class="text-sm text-gray-500">在上方选择一个方案以启动视频制作</span>
+        <span v-else class="text-sm text-gray-500">在上方点击任一方案按钮，系统会把该方案作为 `copy` 变量送入视频模式</span>
       </div>
     </div>
   </div>
@@ -372,14 +379,33 @@ function scrollOutput() {
   background: var(--bg-surface);
 }
 .plan-card:hover {
-  @apply border-purple-300;
-  box-shadow: var(--shadow-md);
+  border-color: #F97316;
+  box-shadow: 0 12px 24px rgba(249, 115, 22, 0.12);
 }
 .plan-card.selected-plan {
-  @apply border-purple-500 bg-purple-50;
-  box-shadow: var(--shadow-focus);
+  border-color: #F97316;
+  background: linear-gradient(180deg, #FFF7ED 0%, #FFFFFF 100%);
+  box-shadow: 0 14px 28px rgba(249, 115, 22, 0.16);
 }
-.plan-number { @apply text-xs font-bold text-purple-600 mb-1; }
+.plan-card__head {
+  @apply flex items-center justify-between gap-3 mb-2;
+}
+.plan-number { @apply text-xs font-bold text-purple-600; }
+.plan-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #FFF7ED;
+  color: #C2410C;
+  font-size: 11px;
+  font-weight: 700;
+}
+.plan-card.selected-plan .plan-cta {
+  background: linear-gradient(135deg, #F97316 0%, #FB7185 100%);
+  color: #FFFFFF;
+}
 .plan-preview { @apply text-xs text-gray-600 leading-relaxed line-clamp-3; }
 
 .video-done-banner {
@@ -389,6 +415,24 @@ function scrollOutput() {
 .action-bar {
   @apply bg-white border border-gray-200;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.action-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #7C3AED;
+  background: rgba(124, 58, 237, 0.08);
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.action-link-btn:hover {
+  background: rgba(124, 58, 237, 0.14);
+  color: #6D28D9;
 }
 
 .editor-panel {

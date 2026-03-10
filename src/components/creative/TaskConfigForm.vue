@@ -4,7 +4,7 @@ import type { TaskConfig } from '@/types'
 import { AUDIENCES, KB_ID } from '@/utils/constants'
 import { VOICE_OPTIONS, SUBTITLE_OPTIONS } from '@/api/pipeline'
 import TagInput from '@/components/common/TagInput.vue'
-import { Wand2, Mic, Type } from 'lucide-vue-next'
+import { Wand2, Mic, Type, Clapperboard, Sparkles } from 'lucide-vue-next'
 
 const props = defineProps<{
   config?: Partial<TaskConfig>
@@ -21,8 +21,8 @@ const form = reactive<TaskConfig>({
   reference_copy: props.config?.reference_copy ?? '',
   brainstorm_keywords: props.config?.brainstorm_keywords ?? [],
   kb_id: props.config?.kb_id ?? KB_ID,
-  voice: props.config?.voice ?? '活力男声',
-  subtitle: props.config?.subtitle ?? '大字报',
+  voice: props.config?.voice ?? '气场御姐',
+  subtitle: props.config?.subtitle ?? '轻快醒目',
 })
 
 const canSubmit = computed(() => form.brainstorm_keywords.length > 0 && !props.loading)
@@ -55,6 +55,25 @@ function handleSubmit() {
 
 <template>
   <div class="task-config-form">
+    <div class="workflow-banner">
+      <div class="workflow-banner__head">
+        <Sparkles :size="14" />
+        <span>新版工作流</span>
+      </div>
+      <div class="workflow-mode-row">
+        <button type="button" class="mode-chip mode-chip--active">
+          <span class="mode-chip__eyebrow">模式选择</span>
+          <span class="mode-chip__title">文案模式</span>
+          <span class="mode-chip__desc">先生成 4 套营销方案，再选中一套启动视频流程</span>
+        </button>
+        <div class="mode-chip mode-chip--ghost">
+          <span class="mode-chip__eyebrow">变量注入</span>
+          <span class="mode-chip__meta">配音：{{ form.voice }}</span>
+          <span class="mode-chip__meta">字幕：{{ form.subtitle }}</span>
+        </div>
+      </div>
+    </div>
+
     <div class="form-section">
       <label class="form-label">目标人群</label>
       <div class="audience-grid">
@@ -120,6 +139,7 @@ function handleSubmit() {
           :class="{ 'selected-card': form.voice === v.value }"
           @click="handleVoiceChange(v.value)"
         >
+          <span class="option-kicker">VOICE</span>
           <span class="option-label">{{ v.label }}</span>
         </div>
       </div>
@@ -139,12 +159,17 @@ function handleSubmit() {
           :class="{ 'selected-card': form.subtitle === s.value }"
           @click="handleSubtitleChange(s.value)"
         >
+          <span class="option-kicker">TEXT</span>
           <span class="option-label">{{ s.label }}</span>
         </div>
       </div>
     </div>
 
     <div class="form-action">
+      <div class="action-hint">
+        <Clapperboard :size="14" />
+        <span>输出 4 套方案后，可直接在右侧按钮卡片中一键做视频</span>
+      </div>
       <el-button
         type="primary"
         size="large"
@@ -154,7 +179,7 @@ function handleSubmit() {
         @click="handleSubmit"
       >
         <Wand2 v-if="!loading" :size="16" class="mr-1" />
-        {{ loading ? 'AI 生成中...' : 'AI 生成创意文案' }}
+        {{ loading ? '文案工作流执行中...' : '生成 4 套营销文案' }}
       </el-button>
     </div>
   </div>
@@ -171,6 +196,77 @@ function handleSubmit() {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.workflow-banner {
+  padding: 14px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 196, 0, 0.16), transparent 38%),
+    linear-gradient(145deg, #12192b 0%, #19233b 100%);
+  color: #F8FAFC;
+  box-shadow: 0 14px 28px rgba(18, 25, 43, 0.16);
+}
+
+.workflow-banner__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.workflow-mode-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.mode-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 96px;
+  padding: 14px;
+  border-radius: 16px;
+  text-align: left;
+}
+
+.mode-chip--active {
+  border: 1px solid rgba(255, 196, 0, 0.42);
+  background: linear-gradient(145deg, rgba(255, 196, 0, 0.18), rgba(255, 255, 255, 0.08));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.mode-chip--ghost {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mode-chip__eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.62);
+}
+
+.mode-chip__title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #FFF7D6;
+}
+
+.mode-chip__desc,
+.mode-chip__meta {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(248, 250, 252, 0.84);
 }
 
 .form-label {
@@ -244,12 +340,15 @@ function handleSubmit() {
 }
 
 .option-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   padding: 10px 12px;
   border-radius: 10px;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   cursor: pointer;
-  text-align: center;
   transition: all 0.2s ease;
 }
 .option-card:hover {
@@ -260,6 +359,13 @@ function handleSubmit() {
   border-color: var(--brand-primary);
   background: rgba(124, 92, 252, 0.08);
   box-shadow: var(--shadow-focus);
+}
+
+.option-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #94A3B8;
 }
 
 .option-label {
@@ -305,23 +411,47 @@ function handleSubmit() {
 }
 
 .form-action {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   padding-top: 8px;
+}
+
+.action-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #FFF7ED;
+  color: #9A3412;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .generate-btn {
   width: 100%;
-  height: 44px;
+  height: 52px;
   font-size: 15px;
   font-weight: 600;
   border-radius: 10px;
-  background: var(--brand-primary);
+  background: linear-gradient(135deg, #F97316 0%, #FB7185 100%);
   border: none;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 10px 20px rgba(249, 115, 22, 0.22);
   transition: all 0.2s ease;
 }
 .generate-btn:hover:not(:disabled) {
-  background: var(--brand-primary-dark);
+  background: linear-gradient(135deg, #EA580C 0%, #F43F5E 100%);
   box-shadow: var(--shadow-md);
   transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+  .workflow-mode-row,
+  .audience-grid,
+  .option-grid,
+  .option-grid-3 {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

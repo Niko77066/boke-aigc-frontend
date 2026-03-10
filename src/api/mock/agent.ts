@@ -1,4 +1,11 @@
-import type { GenerateCopyRequest, GenerateCopyResponse, GenerateTimelineResponse, Script } from '@/types'
+import type {
+  AudioConfig,
+  GenerateCopyRequest,
+  GenerateCopyResponse,
+  GenerateTimelineResponse,
+  Script,
+  VideoConfig,
+} from '@/types'
 import { mockScripts, mockTimelines } from './data'
 import { delay, generateId } from '@/utils/helpers'
 
@@ -27,7 +34,12 @@ export async function generateCopy(request: GenerateCopyRequest): Promise<Genera
   }
 }
 
-export async function generateTimeline(): Promise<GenerateTimelineResponse> {
+export async function generateTimeline(
+  _selectedScript?: Script,
+  _ttsConfig?: AudioConfig,
+  _subtitleConfig?: VideoConfig,
+  _kbId?: string,
+): Promise<GenerateTimelineResponse> {
   await delay(2000)
 
   const timelines = mockTimelines()

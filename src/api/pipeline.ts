@@ -6,16 +6,16 @@ const PIPELINE_KEY = 'Bearer converse-yZLNsh2BGTWNL65KHFAmry3R2wGGCcs4vBWl2WOtPB
 // ── Option constants ──────────────────────────────────────────────
 
 export const VOICE_OPTIONS = [
-  { value: '活力男声', label: '活力男声' },
-  { value: '专业男声', label: '专业男声' },
-  { value: '甜美女声', label: '甜美女声' },
-  { value: '沉稳女声', label: '沉稳女声' },
+  { value: '气场御姐', label: '气场御姐' },
+  { value: '治愈温柔', label: '治愈温柔' },
+  { value: '甜台少女', label: '甜台少女' },
+  { value: '软萌夹子', label: '软萌夹子' },
 ] as const
 
 export const SUBTITLE_OPTIONS = [
-  { value: '大字报', label: '大字报' },
-  { value: '极简黑底', label: '极简黑底' },
-  { value: '综艺花字', label: '综艺花字' },
+  { value: '轻快醒目', label: '轻快醒目' },
+  { value: '高能冲击', label: '高能冲击' },
+  { value: '爆款横幅', label: '爆款横幅' },
 ] as const
 
 export type PipelineMode = '文案' | '视频'

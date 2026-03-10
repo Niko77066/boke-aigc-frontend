@@ -81,10 +81,10 @@ export const useCreativeStore = defineStore('creative', () => {
   }
 
   function getVoice(): VoiceOption {
-    return (taskConfig.value?.voice as VoiceOption) || '活力男声'
+    return (taskConfig.value?.voice as VoiceOption) || '气场御姐'
   }
   function getSubtitle(): SubtitleOption {
-    return (taskConfig.value?.subtitle as SubtitleOption) || '大字报'
+    return (taskConfig.value?.subtitle as SubtitleOption) || '轻快醒目'
   }
 
   // ── Legacy mock actions ─────────────────────────────────────────

@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { Asset, AssetFilter } from '@/types'
 import { assetApi, externalApi } from '@/api'
 import type { UploadVideoOptions, UploadStatusResponse, VideoStatus } from '@/api/external'
+import { hasApiBaseUrl } from '@/config/runtime'
 
 export const useAssetStore = defineStore('asset', () => {
   const assets = ref<Asset[]>([])
@@ -105,7 +106,7 @@ export const useAssetStore = defineStore('asset', () => {
       uploading.value = false
       uploadProgress.value = 100
 
-      // 将上传的文件加入本地 assets 列表（状态 processing）
+      // 文件流上传时先插入本地占位，目录模式则等轮询返回视频列表后再补齐
       files.forEach((f, idx) => {
         assets.value.unshift({
           id: `ext_${res.folder_id}_${idx}`,
@@ -120,17 +121,16 @@ export const useAssetStore = defineStore('asset', () => {
           file_size: f.size,
           width: 0,
           height: 0,
+          kb_id: '',
         })
       })
       total.value = assets.value.length
 
-      // 轮询暂时关闭 — 后端状态接口同步有延迟
-      // pollStopper = externalApi.pollUploadStatus(
-      //   res.folder_id,
-      //   handleStatusUpdate,
-      //   handlePollError,
-      // )
-      uploadState.value = 'completed'
+      pollStopper = externalApi.pollUploadStatus(
+        res.folder_id,
+        handleStatusUpdate,
+        handlePollError,
+      )
     } catch (err) {
       uploading.value = false
       uploadState.value = 'error'
@@ -147,16 +147,36 @@ export const useAssetStore = defineStore('asset', () => {
     // 用 folder_id + index 匹配，避免 duplicate filename 问题
     status.videos.forEach((v, idx) => {
       const localId = `ext_${activeFolderId.value}_${idx}`
-      const localAsset = assets.value.find((a) => a.id === localId)
-      if (localAsset) {
-        localAsset.name = v.file_name
-        localAsset.status = v.state === 'completed' ? 'completed' : v.state === 'failed' ? 'failed' : 'processing'
-        if (v.media_id) {
-          localAsset.kb_id = v.media_id
+      let localAsset = assets.value.find((a) => a.id === localId)
+
+      if (!localAsset) {
+        localAsset = {
+          id: localId,
+          name: v.file_name,
+          type: 'video',
+          url: '',
+          thumbnail: '',
+          tags: [],
+          status: 'processing',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          file_size: 0,
+          width: 0,
+          height: 0,
+          kb_id: '',
         }
-        localAsset.updated_at = new Date().toISOString()
+        assets.value.unshift(localAsset)
       }
+
+      localAsset.name = v.file_name
+      localAsset.status = v.state === 'completed' ? 'completed' : v.state === 'failed' ? 'failed' : 'processing'
+      if (v.media_id) {
+        localAsset.kb_id = v.media_id
+      }
+      localAsset.updated_at = new Date().toISOString()
     })
+
+    total.value = assets.value.length
 
     if (status.state !== 'processing') {
       uploadState.value = status.state
@@ -167,6 +187,7 @@ export const useAssetStore = defineStore('asset', () => {
   function handlePollError(err: Error) {
     uploadState.value = 'error'
     uploadError.value = err.message
+    uploading.value = false
     stopPolling()
   }
 
@@ -179,7 +200,7 @@ export const useAssetStore = defineStore('asset', () => {
 
   /** 统一入口：优先真实 API，fallback 到 mock */
   async function uploadFiles(files: File[], options?: UploadVideoOptions) {
-    const useRealApi = Boolean(import.meta.env.VITE_API_BASE_URL)
+    const useRealApi = hasApiBaseUrl()
     if (useRealApi) {
       await uploadVideos(files, options)
     } else {
@@ -235,10 +256,13 @@ export const useAssetStore = defineStore('asset', () => {
 
   function resetUploadState() {
     stopPolling()
+    uploading.value = false
+    uploadProgress.value = 0
     uploadState.value = 'idle'
     uploadError.value = null
     videoStatuses.value = []
     processedCount.value = 0
+    totalVideoCount.value = 0
     activeFolderId.value = null
   }
 

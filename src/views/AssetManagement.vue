@@ -7,6 +7,7 @@ import TagInput from '@/components/common/TagInput.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, FolderOpen, Upload, Loader2, CheckCircle, XCircle } from 'lucide-vue-next'
 import type { UploadVideoOptions } from '@/api/external'
+import { hasApiBaseUrl } from '@/config/runtime'
 
 const assetStore = useAssetStore()
 const editingAssetId = ref<string | null>(null)
@@ -23,8 +24,9 @@ const showUploadConfig = ref(false)
 const productName = ref('')
 const folderName = ref('')
 const analyzePrompt = ref('')
+const serverFolder = ref('')
 
-const useRealApi = Boolean(import.meta.env.VITE_API_BASE_URL)
+const useRealApi = hasApiBaseUrl()
 
 onMounted(() => {
   assetStore.fetchAssets()
@@ -85,6 +87,7 @@ onUnmounted(() => {
 async function handleUpload(files: File[]) {
   try {
     const options: UploadVideoOptions = {}
+    if (serverFolder.value) options.folder = serverFolder.value
     if (productName.value) options.product_name = productName.value
     if (folderName.value) options.folder_name = folderName.value
     if (analyzePrompt.value) options.analyze_prompt = analyzePrompt.value
@@ -93,6 +96,27 @@ async function handleUpload(files: File[]) {
     ElMessage.success(`成功上传 ${files.length} 个文件`)
   } catch {
     ElMessage.error(assetStore.uploadError ?? '上传失败，请重试')
+  }
+}
+
+async function handleFolderUpload() {
+  if (!serverFolder.value.trim()) {
+    ElMessage.warning('请先填写服务器素材目录')
+    return
+  }
+
+  try {
+    const options: UploadVideoOptions = {
+      folder: serverFolder.value.trim(),
+    }
+    if (productName.value) options.product_name = productName.value
+    if (folderName.value) options.folder_name = folderName.value
+    if (analyzePrompt.value) options.analyze_prompt = analyzePrompt.value
+
+    await assetStore.uploadFiles([], options)
+    ElMessage.success('已提交服务器目录导入任务')
+  } catch {
+    ElMessage.error(assetStore.uploadError ?? '目录导入失败，请重试')
   }
 }
 
@@ -166,7 +190,15 @@ async function saveTags() {
           <span>{{ showUploadConfig ? '收起上传配置' : '展开上传配置（产品名/分析维度）' }}</span>
         </div>
         <transition name="fade-slide">
-          <div v-if="showUploadConfig" class="config-fields glass-morphism rounded-lg p-4 mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div v-if="showUploadConfig" class="config-fields glass-morphism rounded-lg p-4 mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <el-input
+              v-model="serverFolder"
+              placeholder="服务器素材目录（可选，支持目录模式）"
+              clearable
+              size="default"
+            >
+              <template #prepend>目录</template>
+            </el-input>
             <el-input
               v-model="productName"
               placeholder="产品名称（可选）"
@@ -191,6 +223,16 @@ async function saveTags() {
             >
               <template #prepend>分析</template>
             </el-input>
+            <div class="flex items-center">
+              <el-button
+                type="primary"
+                plain
+                :loading="assetStore.uploading"
+                @click="handleFolderUpload"
+              >
+                从服务器目录导入
+              </el-button>
+            </div>
           </div>
         </transition>
       </div>

@@ -57,15 +57,17 @@ function previewStyle(style: SubtitleStyle): Record<string, string | undefined> 
   @apply relative rounded-2xl cursor-pointer transition-all duration-300 bg-white border border-gray-200 shadow-sm;
 }
 .style-card:hover {
-  @apply border-purple-400 shadow-md;
+  border-color: #FB923C;
+  box-shadow: 0 12px 24px rgba(249, 115, 22, 0.12);
 }
 .card-content {
   @apply rounded-2xl h-full w-full overflow-hidden bg-white;
 }
 .selected-card {
-  @apply border-purple-500;
+  border-color: #F97316;
+  background: linear-gradient(180deg, #FFF7ED 0%, #FFFFFF 100%);
   transform: translateY(-2px);
-  box-shadow: var(--shadow-focus);
+  box-shadow: 0 14px 28px rgba(249, 115, 22, 0.16);
 }
 
 .style-preview {

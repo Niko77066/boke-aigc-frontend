@@ -69,12 +69,12 @@ function startRender() {
       <div>
         <h1 class="page-title text-2xl font-bold text-gray-900">音画配置</h1>
         <p class="page-desc text-sm text-gray-500 mt-1">
-          选择配音语音和字幕样式，定制您的营销视频风格
+          校准新版工作流里的配音和字幕变量，确认后进入渲染
         </p>
       </div>
       <el-button text @click="goBack">
         <ArrowLeft :size="16" class="mr-1" />
-        返回修改文案
+        返回文案工作台
       </el-button>
     </div>
 
@@ -157,7 +157,7 @@ function startRender() {
     <div class="action-bar glass-morphism flex items-center justify-between p-4 rounded-2xl">
       <el-button size="large" @click="goBack">
         <ArrowLeft :size="16" class="mr-1" />
-        上一步
+        返回文案模式
       </el-button>
       <el-button
         type="primary"
@@ -167,7 +167,7 @@ function startRender() {
         @click="startRender"
       >
         <Play :size="16" class="mr-2" />
-        开始渲染视频
+        确认音画并开始渲染
       </el-button>
     </div>
   </div>
@@ -201,16 +201,16 @@ function startRender() {
 /* Render button */
 .render-btn {
   @apply font-medium rounded-lg px-6 py-2;
-  background-color: #7C5CFC;
+  background: linear-gradient(135deg, #F97316 0%, #FB7185 100%);
   color: #FFFFFF;
   border: none;
-  box-shadow: 0 2px 4px rgba(26, 26, 46, 0.06);
+  box-shadow: 0 10px 20px rgba(249, 115, 22, 0.18);
   transition: all 0.2s ease;
 }
 
 .render-btn:hover:not(.is-disabled) {
-  background-color: #6A4BE3;
-  box-shadow: 0 4px 12px rgba(26, 26, 46, 0.1);
+  background: linear-gradient(135deg, #EA580C 0%, #F43F5E 100%);
+  box-shadow: 0 12px 24px rgba(249, 115, 22, 0.22);
   transform: translateY(-1px);
 }
 
@@ -223,8 +223,8 @@ function startRender() {
 /* Status badges */
 .section-status-done {
   @apply flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full;
-  background-color: rgba(124, 92, 252, 0.1);
-  color: #7C5CFC;
+  background-color: rgba(249, 115, 22, 0.1);
+  color: #C2410C;
 }
 
 .section-status-pending {
@@ -258,14 +258,14 @@ function startRender() {
 
 /* Element Plus Overrides for Arc Theme */
 :deep(.el-button--primary) {
-  background-color: #7C5CFC !important;
-  border-color: #7C5CFC !important;
+  background-color: #F97316 !important;
+  border-color: #F97316 !important;
   color: #FFFFFF !important;
 }
 
 :deep(.el-button--primary:hover) {
-  background-color: #6A4BE3 !important;
-  border-color: #6A4BE3 !important;
+  background-color: #EA580C !important;
+  border-color: #EA580C !important;
 }
 
 :deep(.el-button.is-plain) {
@@ -275,9 +275,9 @@ function startRender() {
 }
 
 :deep(.el-button.is-plain:hover) {
-  color: #7C5CFC;
-  border-color: #7C5CFC;
-  background-color: rgba(124, 92, 252, 0.05);
+  color: #C2410C;
+  border-color: #F97316;
+  background-color: rgba(249, 115, 22, 0.05);
 }
 
 :deep(.el-card) {
@@ -299,14 +299,14 @@ function startRender() {
 
 :deep(.el-input__wrapper.is-focus),
 :deep(.el-textarea__inner:focus) {
-  box-shadow: 0 0 0 1px #7C5CFC inset !important;
+  box-shadow: 0 0 0 1px #F97316 inset !important;
   background-color: #FFFFFF;
 }
 
 :deep(.el-step__title.is-finish),
 :deep(.el-step__head.is-finish) {
-  color: #7C5CFC;
-  border-color: #7C5CFC;
+  color: #F97316;
+  border-color: #F97316;
 }
 
 :deep(.el-step__title.is-process) {
@@ -323,11 +323,11 @@ function startRender() {
 }
 
 :deep(.el-tabs__item.is-active) {
-  color: #7C5CFC;
+  color: #F97316;
   font-weight: 600;
 }
 
 :deep(.el-tabs__active-bar) {
-  background-color: #7C5CFC;
+  background-color: #F97316;
 }
 </style>

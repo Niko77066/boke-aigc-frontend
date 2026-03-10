@@ -72,19 +72,25 @@ function styleLabel(style: TTSVoice['style']): string {
   @apply relative rounded-2xl cursor-pointer transition-all duration-300 bg-white border border-gray-200 shadow-sm;
 }
 .voice-card:hover {
-  @apply border-purple-400 shadow-md;
+  border-color: #FB923C;
+  box-shadow: 0 12px 24px rgba(249, 115, 22, 0.12);
 }
 .card-content {
   @apply p-3 rounded-2xl h-full w-full overflow-hidden relative bg-white;
 }
 .selected-card {
-  @apply border-purple-500;
+  border-color: #F97316;
+  background: linear-gradient(180deg, #FFF7ED 0%, #FFFFFF 100%);
   transform: translateY(-2px);
-  box-shadow: var(--shadow-focus);
+  box-shadow: 0 14px 28px rgba(249, 115, 22, 0.16);
 }
 
 .preview-btn {
-  @apply bg-purple-50 text-purple-500 border-none transition-all opacity-50 hover:opacity-100 hover:bg-purple-100;
+  background: #FFF7ED;
+  color: #C2410C;
+  border: none;
+  transition: all 0.2s ease;
+  opacity: 0.6;
 }
 .voice-card:hover .preview-btn {
   opacity: 1;
@@ -96,7 +102,8 @@ function styleLabel(style: TTSVoice['style']): string {
   pointer-events: none;
 }
 .wave-bar {
-  @apply w-px bg-purple-300;
+  background: #FDBA74;
+  width: 1px;
   transition: height 0.3s ease-in-out;
 }
 .selected-card .waveform, .voice-card:hover .waveform {
