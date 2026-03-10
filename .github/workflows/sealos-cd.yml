@@ -125,27 +125,22 @@ jobs:
 
       - name: Render manifests
         if: steps.deploy_check.outputs.enabled == 'true'
-        run: |
-          mkdir -p .rendered
-          export APP_NAME IMAGE_REF NAMESPACE HOST API_BASE_URL
-          for tpl in deploy/sealos/deployment.yaml.tpl deploy/sealos/service.yaml.tpl; do
-            out=".rendered/$(basename "${tpl%.tpl}")"
-            perl -pe 's/\$\{(\w+)\}/defined $ENV{$1} ? $ENV{$1} : q()/ge' "${tpl}" > "${out}"
-          done
-
-          if [ -n "${HOST}" ]; then
-            perl -pe 's/\$\{(\w+)\}/defined $ENV{$1} ? $ENV{$1} : q()/ge' deploy/sealos/ingress.yaml.tpl > .rendered/ingress.yaml
-          fi
+        run: echo "Updating existing Sealos deployment ${APP_NAME} in namespace ${NAMESPACE}"
 
       - name: Apply manifests
         if: steps.deploy_check.outputs.enabled == 'true'
         run: |
           if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
-            kubectl create namespace "${NAMESPACE}"
+            echo "Namespace ${NAMESPACE} does not exist."
+            exit 1
           fi
-          kubectl apply -f .rendered/deployment.yaml
-          kubectl apply -f .rendered/service.yaml
-          if [ -f .rendered/ingress.yaml ]; then
-            kubectl apply -f .rendered/ingress.yaml
+
+          if ! kubectl get deployment "${APP_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+            echo "Deployment ${APP_NAME} does not exist in namespace ${NAMESPACE}."
+            exit 1
           fi
+
+          kubectl set image deployment/"${APP_NAME}" "${APP_NAME}"="${IMAGE_REF}" -n "${NAMESPACE}"
+          kubectl set env deployment/"${APP_NAME}" VITE_API_BASE_URL="${API_BASE_URL}" -n "${NAMESPACE}"
+          kubectl annotate deployment/"${APP_NAME}" originImageName="${IMAGE_REF}" -n "${NAMESPACE}" --overwrite
           kubectl rollout status deployment/"${APP_NAME}" -n "${NAMESPACE}" --timeout=180s
