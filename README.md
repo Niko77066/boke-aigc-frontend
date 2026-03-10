@@ -49,25 +49,30 @@ npm run lint
 
 ## Sealos CI/CD
 
-仓库已内置 GitHub Actions 工作流 `.github/workflows/sealos-cd.yml`，默认在 `main/master` push 或 `v*` tag 时：
+仓库已内置 GitHub Actions 工作流 `.github/workflows/sealos-cd.yml`。
 
-1. 构建 Docker 镜像
-2. 推送到 `ghcr.io/<owner>/<repo>`
-3. 如果配置了 `SEALOS_KUBECONFIG`，自动把镜像部署到 Sealos
+当前自动上线流程：
 
-使用前先在 GitHub 仓库里配置这些项目。
+1. `push` 到 `main/master`
+2. 只有前端和部署相关文件变更时才触发
+3. 先执行 `npm ci`、`npm run type-check`、`npm run build-only`
+4. 构建并推送 Docker 镜像到 `ghcr.io/<owner>/<repo>`
+5. 自动更新 Sealos 上现有 Deployment
 
-- `Secret: SEALOS_KUBECONFIG`
-- 值为 Sealos 集群 kubeconfig 原文
+需要配置这些 GitHub 项：
+
 - `Variable: SEALOS_APP_NAME`
-- 例如 `boke-aigc-frontend`
+- 当前值应与线上 Sealos Deployment 名一致，例如 `boke-aigc-frontend-web`
 - `Variable: SEALOS_NAMESPACE`
-- 例如 `prod`
-- `Variable: SEALOS_HOST`
-- 例如 `aigc.example.com`
+- 例如 `ns-vd309f0o`
 - `Variable: VITE_API_BASE_URL`
 - 例如 `https://api.example.com`
+- `Secret: SEALOS_KUBECONFIG`
+- 值为 Sealos 集群 kubeconfig 原文
 
-Sealos 部署模板位于 `deploy/sealos/deployment.yaml.tpl`、`deploy/sealos/service.yaml.tpl`、`deploy/sealos/ingress.yaml.tpl`。
+安全建议：
 
-如果 GHCR 镜像保持私有，Sealos 拉镜像会失败。最简单的做法是把该 GitHub Package 改成 `public`。
+- 把 `SEALOS_KUBECONFIG` 从仓库级 Secret 挪到 GitHub `production` environment 的同名 Secret
+- 重新生成一份 Sealos kubeconfig 并替换旧值，因为旧值曾暴露
+- 尽量使用只允许访问目标 namespace 的 kubeconfig
+- GHCR 包保持 `public`，避免在集群里额外保存镜像仓库凭据

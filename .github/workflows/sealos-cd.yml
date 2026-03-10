@@ -7,22 +7,59 @@ on:
       - master
     tags:
       - 'v*'
+    paths:
+      - '.github/workflows/sealos-cd.yml'
+      - '.dockerignore'
+      - 'Dockerfile'
+      - 'docker-entrypoint.d/**'
+      - 'env.d.ts'
+      - 'index.html'
+      - 'nginx.conf'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'public/**'
+      - 'src/**'
+      - 'tsconfig*.json'
+      - 'vite.config.ts'
   workflow_dispatch:
 
 concurrency:
   group: sealos-cd-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  packages: write
-
 env:
   REGISTRY: ghcr.io
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Production build
+        run: npm run build-only
+
   build:
     runs-on: ubuntu-latest
+    needs: verify
+    permissions:
+      contents: read
+      packages: write
     outputs:
       app_name: ${{ steps.meta.outputs.app_name }}
       image_ref: ${{ steps.meta.outputs.image_ref }}
@@ -91,19 +128,24 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
+    environment:
+      name: production
+    permissions:
+      contents: read
     env:
       APP_NAME: ${{ needs.build.outputs.app_name }}
       IMAGE_REF: ${{ needs.build.outputs.image_ref }}
       NAMESPACE: ${{ needs.build.outputs.namespace }}
       HOST: ${{ needs.build.outputs.host }}
       API_BASE_URL: ${{ needs.build.outputs.api_base_url }}
-      SEALOS_KUBECONFIG: ${{ secrets.SEALOS_KUBECONFIG }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Check deploy prerequisites
         id: deploy_check
+        env:
+          SEALOS_KUBECONFIG: ${{ secrets.SEALOS_KUBECONFIG }}
         run: |
           if [ -n "${SEALOS_KUBECONFIG}" ]; then
             echo "enabled=true" >> "${GITHUB_OUTPUT}"
@@ -118,6 +160,8 @@ jobs:
 
       - name: Write kubeconfig
         if: steps.deploy_check.outputs.enabled == 'true'
+        env:
+          SEALOS_KUBECONFIG: ${{ secrets.SEALOS_KUBECONFIG }}
         run: |
           mkdir -p "${HOME}/.kube"
           printf '%s' "${SEALOS_KUBECONFIG}" > "${HOME}/.kube/config"
