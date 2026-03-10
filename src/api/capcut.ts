@@ -278,13 +278,17 @@ export function extractTaskId(text: string): string | null {
  */
 export function extractAllTaskIds(text: string): string[] {
   const patterns = [
-    /task_id["\s]*[:=]\s*["']?([a-zA-Z0-9_-]+)["']?/gi,
-    /任务ID[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/g,
+    /task_id["\s]*[:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
+    /task[\s_-]*id["\s]*[:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
+    /taskId["\s]*[:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
+    /-\s*\*\*[^*]+\*\*.*?task_id\s*[:：]\s*`?([a-zA-Z0-9_-]+)`?/gi,
+    /任务\s*ID[：:\s]*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
     /任务编号[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/g,
     /渲染任务[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/g,
     /render.*?id["\s]*[:=]\s*["']?([a-zA-Z0-9_-]+)["']?/gi,
     /\*\*task_id\*\*[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/gi,
     /`task_id`[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/gi,
+    /[?&]task_id=([a-zA-Z0-9_-]+)/gi,
   ]
 
   const seen = new Set<string>()

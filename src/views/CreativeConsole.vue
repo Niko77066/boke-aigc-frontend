@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, nextTick, onMounted } from 'vue'
+import { computed, ref, nextTick, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCreativeStore } from '@/stores/creative'
 import { useWorkflowStore } from '@/stores/workflow'
@@ -21,21 +21,51 @@ const outputRef = ref<HTMLDivElement | null>(null)
 const selectedPlanIndex = ref<number | null>(null)
 const editingScript = ref(false)
 const editingTtsText = ref('')
+const redirectingToResult = ref(false)
+
+function redirectToResult() {
+  if (redirectingToResult.value) return
+  redirectingToResult.value = true
+
+  workflowStore.nextStep()
+  router.push({
+    path: '/result',
+    query: {
+      taskIds: creativeStore.videoTaskIds.join(',') || undefined,
+      draftId: creativeStore.videoDraftId || undefined,
+    },
+  })
+}
 
 // ── Auto-redirect callback ───────────────────────────────────────
 onMounted(() => {
-  creativeStore.onAllVideosDone(() => {
-    workflowStore.nextStep()
-    router.push({
-      path: '/result',
-      query: {
-        taskIds: creativeStore.videoTaskIds.join(',') || undefined,
-        draftId: creativeStore.videoDraftId || undefined,
-      },
-    })
-  })
+  creativeStore.onAllVideosDone(redirectToResult)
   creativeStore.resumePendingVideoPolling()
 })
+
+watch(
+  () => [
+    creativeStore.pipelineVideoStarted,
+    creativeStore.pipelineRunning,
+    creativeStore.pipelineError,
+    creativeStore.videoTaskIds.length,
+    creativeStore.videoPollingCount,
+    creativeStore.videoAllDone,
+  ],
+  () => {
+    if (!creativeStore.pipelineVideoStarted) {
+      redirectingToResult.value = false
+      return
+    }
+
+    const canRedirectWithoutTasks = !creativeStore.pipelineRunning && !creativeStore.pipelineError && creativeStore.videoTaskIds.length === 0
+    const canRedirectWithTasks = !creativeStore.pipelineRunning && creativeStore.videoAllDone
+
+    if (canRedirectWithoutTasks || canRedirectWithTasks) {
+      redirectToResult()
+    }
+  },
+)
 
 // ── Step tracking ────────────────────────────────────────────────
 const currentStep = computed(() => {
@@ -129,6 +159,7 @@ function handleAbort() {
 function handleReset() {
   creativeStore.resetPipeline()
   selectedPlanIndex.value = null
+  redirectingToResult.value = false
 }
 
 function handleEditPlan() {

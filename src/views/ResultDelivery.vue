@@ -128,6 +128,9 @@ function triggerConfetti() {
 
 onMounted(() => {
   restoreFromRouteQuery()
+  if (creativeStore.videoTaskIds.length === 0 && creativeStore.pipelineOutput) {
+    creativeStore.recoverVideoTasksFromOutput()
+  }
   creativeStore.resumePendingVideoPolling()
   if (hasVideos.value) triggerConfetti()
   if (creativeStore.videoDraftId) loadDraftInfo()

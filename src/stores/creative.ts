@@ -76,6 +76,7 @@ export const useCreativeStore = defineStore('creative', () => {
     new Map((persisted?.videoRenderStatuses ?? []).map((status) => [status.task_id, status])),
   )
   const videoPollingCount = ref(0)
+  const activeVideoPolling = new Set<string>()
   const hasRecoverableResult = computed(() => {
     return pipelineVideoStarted.value
       || videoTaskIds.value.length > 0
@@ -131,6 +132,7 @@ export const useCreativeStore = defineStore('creative', () => {
     videoDraftId.value = null
     videoRenderStatuses.value = new Map()
     videoPollingCount.value = 0
+    activeVideoPolling.clear()
   }
 
   // ── Config helpers ──────────────────────────────────────────────
@@ -292,11 +294,18 @@ export const useCreativeStore = defineStore('creative', () => {
 
   // ── Video render tracking ───────────────────────────────────────
 
-  function autoDetectAndPoll(text: string) {
+  function syncVideoTasksFromOutput(text: string): string[] {
     const tids = extractAllTaskIds(text)
     const did = extractDraftId(text)
-    if (tids.length > 0) videoTaskIds.value = tids
+    if (tids.length > 0) {
+      videoTaskIds.value = [...new Set([...videoTaskIds.value, ...tids])]
+    }
     if (did) videoDraftId.value = did
+    return tids
+  }
+
+  function autoDetectAndPoll(text: string) {
+    const tids = syncVideoTasksFromOutput(text)
 
     if (tids.length > 0) {
       for (const tid of tids) {
@@ -311,6 +320,9 @@ export const useCreativeStore = defineStore('creative', () => {
   }
 
   async function startVideoPolling(taskId: string) {
+    if (activeVideoPolling.has(taskId)) return
+
+    activeVideoPolling.add(taskId)
     videoPollingCount.value++
 
     try {
@@ -337,6 +349,7 @@ export const useCreativeStore = defineStore('creative', () => {
       }
       videoRenderStatuses.value = new Map(videoRenderStatuses.value.set(taskId, errStatus))
     } finally {
+      activeVideoPolling.delete(taskId)
       videoPollingCount.value--
       // Check if ALL polling is done
       if (videoPollingCount.value === 0 && _onAllVideosDone) {
@@ -385,6 +398,20 @@ export const useCreativeStore = defineStore('creative', () => {
     }
   }
 
+  function recoverVideoTasksFromOutput(text?: string) {
+    const sourceText = text ?? pipelineOutput.value
+    if (!sourceText.trim()) return []
+
+    const taskIds = syncVideoTasksFromOutput(sourceText)
+    for (const taskId of taskIds) {
+      const status = videoRenderStatuses.value.get(taskId)
+      if (!status || (status.status !== 'success' && status.status !== 'failed')) {
+        startVideoPolling(taskId)
+      }
+    }
+    return taskIds
+  }
+
   return {
     // config
     taskConfig,
@@ -400,6 +427,6 @@ export const useCreativeStore = defineStore('creative', () => {
     videoTaskIds, videoDraftId, videoRenderStatuses, videoPollingCount,
     videoAllDone, videoStatusList, hasRecoverableResult,
     trackVideoTask, onAllVideosDone, setVideoDraftId,
-    restoreResultContext, resumePendingVideoPolling,
+    restoreResultContext, resumePendingVideoPolling, recoverVideoTasksFromOutput,
   }
 })
