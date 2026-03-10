@@ -4,7 +4,7 @@ import type { TaskConfig } from '@/types'
 import { AUDIENCES, KB_ID } from '@/utils/constants'
 import { VOICE_OPTIONS, SUBTITLE_OPTIONS } from '@/api/pipeline'
 import TagInput from '@/components/common/TagInput.vue'
-import { Wand2, Mic, Type, Clapperboard, Sparkles } from 'lucide-vue-next'
+import { Wand2, Mic, Type, Clapperboard } from 'lucide-vue-next'
 
 const props = defineProps<{
   config?: Partial<TaskConfig>
@@ -55,25 +55,6 @@ function handleSubmit() {
 
 <template>
   <div class="task-config-form">
-    <div class="workflow-banner">
-      <div class="workflow-banner__head">
-        <Sparkles :size="14" />
-        <span>新版工作流</span>
-      </div>
-      <div class="workflow-mode-row">
-        <button type="button" class="mode-chip mode-chip--active">
-          <span class="mode-chip__eyebrow">模式选择</span>
-          <span class="mode-chip__title">文案模式</span>
-          <span class="mode-chip__desc">先生成 4 套营销方案，再选中一套启动视频流程</span>
-        </button>
-        <div class="mode-chip mode-chip--ghost">
-          <span class="mode-chip__eyebrow">变量注入</span>
-          <span class="mode-chip__meta">配音：{{ form.voice }}</span>
-          <span class="mode-chip__meta">字幕：{{ form.subtitle }}</span>
-        </div>
-      </div>
-    </div>
-
     <div class="form-section">
       <label class="form-label">目标人群</label>
       <div class="audience-grid">
@@ -196,77 +177,6 @@ function handleSubmit() {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.workflow-banner {
-  padding: 14px;
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at top right, rgba(255, 196, 0, 0.16), transparent 38%),
-    linear-gradient(145deg, #12192b 0%, #19233b 100%);
-  color: #F8FAFC;
-  box-shadow: 0 14px 28px rgba(18, 25, 43, 0.16);
-}
-
-.workflow-banner__head {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.workflow-mode-row {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.mode-chip {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-height: 96px;
-  padding: 14px;
-  border-radius: 16px;
-  text-align: left;
-}
-
-.mode-chip--active {
-  border: 1px solid rgba(255, 196, 0, 0.42);
-  background: linear-gradient(145deg, rgba(255, 196, 0, 0.18), rgba(255, 255, 255, 0.08));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-.mode-chip--ghost {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.mode-chip__eyebrow {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(248, 250, 252, 0.62);
-}
-
-.mode-chip__title {
-  font-size: 17px;
-  font-weight: 700;
-  color: #FFF7D6;
-}
-
-.mode-chip__desc,
-.mode-chip__meta {
-  font-size: 12px;
-  line-height: 1.5;
-  color: rgba(248, 250, 252, 0.84);
 }
 
 .form-label {

@@ -1,8 +1,7 @@
 import type { Asset, GetAssetsResponse, UploadAssetResponse, UpdateTagsResponse } from '@/types'
-import { mockAssets } from './data'
 import { delay, generateId } from '@/utils/helpers'
 
-let assets = [...mockAssets]
+let assets: Asset[] = []
 
 export async function fetchAssets(params?: { page?: number; size?: number; type?: string; tags?: string[] }): Promise<GetAssetsResponse> {
   await delay(600)
