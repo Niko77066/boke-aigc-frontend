@@ -140,7 +140,9 @@ jobs:
       - name: Apply manifests
         if: steps.deploy_check.outputs.enabled == 'true'
         run: |
-          kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+          if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
+            kubectl create namespace "${NAMESPACE}"
+          fi
           kubectl apply -f .rendered/deployment.yaml
           kubectl apply -f .rendered/service.yaml
           if [ -f .rendered/ingress.yaml ]; then
