@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { TaskConfig, Script } from '@/types'
 import { agentApi } from '@/api'
 import {
@@ -16,17 +16,51 @@ import {
 } from '@/api/capcut'
 import { KB_ID } from '@/utils/constants'
 
+const CREATIVE_STORAGE_KEY = 'boke-aigc:creative'
+
+interface PersistedCreativeState {
+  taskConfig: TaskConfig | null
+  pipelineMode: PipelineMode
+  pipelineOutput: string
+  pipelineChatId?: string
+  pipelineError: string | null
+  pipelineVideoStarted: boolean
+  videoTaskIds: string[]
+  videoDraftId: string | null
+  videoRenderStatuses: VideoTaskStatus[]
+}
+
+function loadPersistedState(): PersistedCreativeState | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.localStorage.getItem(CREATIVE_STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as PersistedCreativeState
+  } catch {
+    return null
+  }
+}
+
+function persistState(state: PersistedCreativeState) {
+  if (typeof window === 'undefined') return
+
+  window.localStorage.setItem(CREATIVE_STORAGE_KEY, JSON.stringify(state))
+}
+
 export const useCreativeStore = defineStore('creative', () => {
+  const persisted = loadPersistedState()
+
   // ── Form / config state ─────────────────────────────────────────
-  const taskConfig = ref<TaskConfig | null>(null)
+  const taskConfig = ref<TaskConfig | null>(persisted?.taskConfig ?? null)
 
   // ── Pipeline state ──────────────────────────────────────────────
-  const pipelineMode = ref<PipelineMode>('文案')
+  const pipelineMode = ref<PipelineMode>(persisted?.pipelineMode ?? '文案')
   const pipelineRunning = ref(false)
-  const pipelineOutput = ref('')
-  const pipelineChatId = ref<string | undefined>(undefined)
-  const pipelineError = ref<string | null>(null)
-  const pipelineVideoStarted = ref(false)
+  const pipelineOutput = ref(persisted?.pipelineOutput ?? '')
+  const pipelineChatId = ref<string | undefined>(persisted?.pipelineChatId)
+  const pipelineError = ref<string | null>(persisted?.pipelineError ?? null)
+  const pipelineVideoStarted = ref(persisted?.pipelineVideoStarted ?? false)
 
   // ── Script selection (legacy mock) ──────────────────────────────
   const scripts = ref<Script[]>([])
@@ -36,10 +70,18 @@ export const useCreativeStore = defineStore('creative', () => {
   const error = ref<string | null>(null)
 
   // ── Video render tracking (CapCut MCP) — multi task_id ──────────
-  const videoTaskIds = ref<string[]>([])
-  const videoDraftId = ref<string | null>(null)
-  const videoRenderStatuses = ref<Map<string, VideoTaskStatus>>(new Map())
+  const videoTaskIds = ref<string[]>(persisted?.videoTaskIds ?? [])
+  const videoDraftId = ref<string | null>(persisted?.videoDraftId ?? null)
+  const videoRenderStatuses = ref<Map<string, VideoTaskStatus>>(
+    new Map((persisted?.videoRenderStatuses ?? []).map((status) => [status.task_id, status])),
+  )
   const videoPollingCount = ref(0)
+  const hasRecoverableResult = computed(() => {
+    return pipelineVideoStarted.value
+      || videoTaskIds.value.length > 0
+      || videoRenderStatuses.value.size > 0
+      || Boolean(videoDraftId.value)
+  })
 
   /** True when all polling tasks have finished (success or failed) */
   const videoAllDone = computed(() => {
@@ -65,6 +107,31 @@ export const useCreativeStore = defineStore('creative', () => {
   }
 
   let abortController: AbortController | null = null
+
+  watch(
+    () => ({
+      taskConfig: taskConfig.value,
+      pipelineMode: pipelineMode.value,
+      pipelineOutput: pipelineOutput.value,
+      pipelineChatId: pipelineChatId.value,
+      pipelineError: pipelineError.value,
+      pipelineVideoStarted: pipelineVideoStarted.value,
+      videoTaskIds: videoTaskIds.value,
+      videoDraftId: videoDraftId.value,
+      videoRenderStatuses: [...videoRenderStatuses.value.values()],
+    }),
+    (state) => {
+      persistState(state)
+    },
+    { deep: true },
+  )
+
+  function clearVideoTracking() {
+    videoTaskIds.value = []
+    videoDraftId.value = null
+    videoRenderStatuses.value = new Map()
+    videoPollingCount.value = 0
+  }
 
   // ── Config helpers ──────────────────────────────────────────────
   function updateTaskConfig(config: Partial<TaskConfig>) {
@@ -143,6 +210,7 @@ export const useCreativeStore = defineStore('creative', () => {
 
   async function generateCopy(msg: string) {
     abortPipeline()
+    clearVideoTracking()
     pipelineMode.value = '文案'
     pipelineRunning.value = true
     pipelineOutput.value = ''
@@ -173,6 +241,7 @@ export const useCreativeStore = defineStore('creative', () => {
 
   async function generateVideo(script: string, msg?: string) {
     abortPipeline()
+    clearVideoTracking()
     pipelineMode.value = '视频'
     pipelineRunning.value = true
     pipelineOutput.value = ''
@@ -217,10 +286,7 @@ export const useCreativeStore = defineStore('creative', () => {
     pipelineChatId.value = undefined
     pipelineError.value = null
     pipelineVideoStarted.value = false
-    videoTaskIds.value = []
-    videoDraftId.value = null
-    videoRenderStatuses.value = new Map()
-    videoPollingCount.value = 0
+    clearVideoTracking()
     _onAllVideosDone = null
   }
 
@@ -251,11 +317,17 @@ export const useCreativeStore = defineStore('creative', () => {
       const final = await pollVideoTask(
         taskId,
         (status) => {
+          if (status.draft_id && !videoDraftId.value) {
+            videoDraftId.value = status.draft_id
+          }
           videoRenderStatuses.value = new Map(videoRenderStatuses.value.set(taskId, status))
         },
         5000,
         300000,
       )
+      if (final.draft_id && !videoDraftId.value) {
+        videoDraftId.value = final.draft_id
+      }
       videoRenderStatuses.value = new Map(videoRenderStatuses.value.set(taskId, final))
     } catch (e) {
       const errStatus: VideoTaskStatus = {
@@ -280,6 +352,39 @@ export const useCreativeStore = defineStore('creative', () => {
     startVideoPolling(taskId)
   }
 
+  function setVideoDraftId(draftId: string | null) {
+    videoDraftId.value = draftId
+  }
+
+  function restoreResultContext(payload: {
+    taskIds?: string[]
+    draftId?: string | null
+    pipelineOutput?: string
+    pipelineVideoStarted?: boolean
+  }) {
+    if (payload.taskIds?.length) {
+      videoTaskIds.value = [...new Set([...videoTaskIds.value, ...payload.taskIds])]
+    }
+    if (payload.draftId) {
+      videoDraftId.value = payload.draftId
+    }
+    if (payload.pipelineOutput !== undefined) {
+      pipelineOutput.value = payload.pipelineOutput
+    }
+    if (payload.pipelineVideoStarted !== undefined) {
+      pipelineVideoStarted.value = payload.pipelineVideoStarted
+    }
+  }
+
+  function resumePendingVideoPolling() {
+    for (const taskId of videoTaskIds.value) {
+      const status = videoRenderStatuses.value.get(taskId)
+      if (!status || (status.status !== 'success' && status.status !== 'failed')) {
+        startVideoPolling(taskId)
+      }
+    }
+  }
+
   return {
     // config
     taskConfig,
@@ -293,7 +398,8 @@ export const useCreativeStore = defineStore('creative', () => {
     generateCopy, generateVideo, abortPipeline, resetPipeline,
     // video render tracking (multi)
     videoTaskIds, videoDraftId, videoRenderStatuses, videoPollingCount,
-    videoAllDone, videoStatusList,
-    trackVideoTask, onAllVideosDone,
+    videoAllDone, videoStatusList, hasRecoverableResult,
+    trackVideoTask, onAllVideosDone, setVideoDraftId,
+    restoreResultContext, resumePendingVideoPolling,
   }
 })

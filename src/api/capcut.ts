@@ -1,16 +1,17 @@
 /**
- * KOX-CUT-API (剪映/CapCut MCP) — 成片查询 & 草稿管理
+ * KOX-CUT-API (剪映/CapCut) — 成片查询 & 草稿管理
  *
  * MCP endpoint: https://cutapi.koxagent.com/cutmcp/mcp
+ * Status endpoint: https://cutapi.koxagent.com/video_task_status
  * Auth: Bearer token (encrypted in workflow config)
  *
- * For the frontend we only need read/status operations:
- *   - get_video_task_status → poll render progress & get download URL
- *   - get_tracks → inspect draft structure
- *   - generate_video → trigger render (if re-render needed)
+ * For the frontend:
+ *   - generate_video / get_tracks still go through MCP
+ *   - video_task_status is polled via direct HTTP API
  */
 
 const CAPCUT_MCP_URL = 'https://cutapi.koxagent.com/cutmcp/mcp'
+const CAPCUT_STATUS_URL = 'https://cutapi.koxagent.com/video_task_status'
 const CAPCUT_SECRET = 'cc94f2a95d7d2bdacd522ff619e4a898:8bf3bde7f8e481437b3e0d8bf54c1ddb753834706b9655645ffb648fda:ba02bf4abd1b72da80a0198dd9202e8f'
 
 // ── Types ───────────────────────────────────────────────────────
@@ -18,13 +19,36 @@ const CAPCUT_SECRET = 'cc94f2a95d7d2bdacd522ff619e4a898:8bf3bde7f8e481437b3e0d8b
 export interface VideoTaskStatus {
   task_id: string
   status: 'pending' | 'processing' | 'success' | 'failed' | string
+  render_status?: string
   progress?: number
   video_url?: string
   cover_url?: string
+  draft_id?: string
+  message?: string | null
   error?: string
   duration?: number
   width?: number
   height?: number
+}
+
+interface VideoTaskStatusApiItem {
+  created_at?: string
+  draft_id?: string | null
+  extra?: Record<string, unknown>
+  id?: number
+  message?: string | null
+  progress?: number | null
+  render_status?: string
+  task_id?: string
+  updated_at?: string
+  video_name?: string | null
+  oss_url?: string | null
+}
+
+interface VideoTaskStatusApiResponse {
+  data?: VideoTaskStatusApiItem
+  error?: string
+  success?: boolean
 }
 
 export interface DraftTrack {
@@ -60,6 +84,29 @@ interface MCPResponse {
 
 let requestId = 1
 
+function parseErrorMessage(rawText: string, fallback: string): string {
+  let message = fallback
+
+  try {
+    const parsed = JSON.parse(rawText) as {
+      error?: string
+      message?: string
+      error_description?: string
+    }
+    if (parsed.error_description) {
+      message = parsed.error_description
+    } else if (parsed.message) {
+      message = parsed.message
+    } else if (parsed.error) {
+      message = parsed.error
+    }
+  } catch {
+    if (rawText.trim()) message = rawText.trim()
+  }
+
+  return message
+}
+
 async function mcpCall<T>(toolName: string, args: Record<string, unknown>): Promise<T> {
   const body: MCPRequest = {
     method: 'tools/call',
@@ -82,11 +129,18 @@ async function mcpCall<T>(toolName: string, args: Record<string, unknown>): Prom
     }),
   })
 
+  const rawText = await res.text()
+
   if (!res.ok) {
-    throw new Error(`CapCut MCP ${res.status}: ${res.statusText}`)
+    const message = parseErrorMessage(rawText, `CapCut MCP ${res.status}: ${res.statusText}`)
+
+    if (res.status === 401) {
+      throw new Error(`CapCut MCP 鉴权失败：${message}`)
+    }
+    throw new Error(message)
   }
 
-  const data: MCPResponse = await res.json()
+  const data: MCPResponse = JSON.parse(rawText) as MCPResponse
 
   if (data.error) {
     throw new Error(`MCP error ${data.error.code}: ${data.error.message}`)
@@ -104,10 +158,61 @@ async function mcpCall<T>(toolName: string, args: Record<string, unknown>): Prom
 // ── Public API ──────────────────────────────────────────────────
 
 /**
- * Query video render task status. Returns progress/URL when done.
+ * Query video render task status via direct HTTP API.
+ * The API returns render_status/oss_url; normalize it to the frontend shape.
  */
 export async function getVideoTaskStatus(taskId: string): Promise<VideoTaskStatus> {
-  return mcpCall<VideoTaskStatus>('get_video_task_status', { task_id: taskId })
+  const url = new URL(CAPCUT_STATUS_URL)
+  url.searchParams.set('task_id', taskId)
+
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${CAPCUT_SECRET}`,
+    },
+  })
+
+  const rawText = await res.text()
+
+  if (!res.ok) {
+    const message = parseErrorMessage(rawText, `CapCut status API ${res.status}: ${res.statusText}`)
+    if (res.status === 401) {
+      throw new Error(`CapCut 状态查询鉴权失败：${message}`)
+    }
+    throw new Error(message)
+  }
+
+  const payload = JSON.parse(rawText) as VideoTaskStatusApiResponse
+
+  if (!payload.success) {
+    throw new Error(payload.error || 'CapCut 状态查询失败')
+  }
+
+  const data = payload.data
+  if (!data?.task_id) {
+    throw new Error('CapCut 状态查询返回缺少 task_id')
+  }
+
+  const renderStatus = data.render_status?.toLowerCase() || ''
+  const normalizedStatus = (() => {
+    if (['completed', 'success', 'succeeded'].includes(renderStatus)) return 'success'
+    if (['failed', 'error', 'canceled', 'cancelled'].includes(renderStatus)) return 'failed'
+    if (['pending', 'queued'].includes(renderStatus)) return 'pending'
+    if (renderStatus) return 'processing'
+    return data.oss_url ? 'success' : 'processing'
+  })()
+
+  return {
+    task_id: data.task_id,
+    status: normalizedStatus,
+    render_status: data.render_status,
+    progress: data.progress ?? undefined,
+    video_url: data.oss_url ?? undefined,
+    draft_id: data.draft_id ?? undefined,
+    message: data.message ?? null,
+    error: normalizedStatus === 'failed' ? (data.message || payload.error || '视频渲染失败') : undefined,
+  }
 }
 
 /**

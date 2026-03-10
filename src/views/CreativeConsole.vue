@@ -26,8 +26,15 @@ const editingTtsText = ref('')
 onMounted(() => {
   creativeStore.onAllVideosDone(() => {
     workflowStore.nextStep()
-    router.push('/result')
+    router.push({
+      path: '/result',
+      query: {
+        taskIds: creativeStore.videoTaskIds.join(',') || undefined,
+        draftId: creativeStore.videoDraftId || undefined,
+      },
+    })
   })
+  creativeStore.resumePendingVideoPolling()
 })
 
 // ── Step tracking ────────────────────────────────────────────────

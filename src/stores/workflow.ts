@@ -1,9 +1,16 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { WizardStep, WizardStepConfig, WorkflowData, WorkflowSnapshot } from '@/types'
 import { generateId } from '@/utils/helpers'
 
 const STEP_ORDER: WizardStep[] = ['creative', 'result']
+const WORKFLOW_STORAGE_KEY = 'boke-aigc:workflow'
+
+interface PersistedWorkflowState {
+  currentStep: WizardStep
+  steps: WizardStepConfig[]
+  workflowData: WorkflowData
+}
 
 function makeStepConfigs(): WizardStepConfig[] {
   return [
@@ -12,10 +19,23 @@ function makeStepConfigs(): WizardStepConfig[] {
   ]
 }
 
+function loadPersistedWorkflowState(): PersistedWorkflowState | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.localStorage.getItem(WORKFLOW_STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as PersistedWorkflowState
+  } catch {
+    return null
+  }
+}
+
 export const useWorkflowStore = defineStore('workflow', () => {
-  const currentStep = ref<WizardStep>('creative')
-  const steps = ref<WizardStepConfig[]>(makeStepConfigs())
-  const workflowData = ref<WorkflowData>({})
+  const persisted = loadPersistedWorkflowState()
+  const currentStep = ref<WizardStep>(persisted?.currentStep ?? 'creative')
+  const steps = ref<WizardStepConfig[]>(persisted?.steps ?? makeStepConfigs())
+  const workflowData = ref<WorkflowData>(persisted?.workflowData ?? {})
   const history = ref<WorkflowSnapshot[]>([])
 
   const currentStepIndex = computed(() => STEP_ORDER.indexOf(currentStep.value))
@@ -107,6 +127,19 @@ export const useWorkflowStore = defineStore('workflow', () => {
     workflowData.value = {}
     history.value = []
   }
+
+  watch(
+    () => ({
+      currentStep: currentStep.value,
+      steps: steps.value,
+      workflowData: workflowData.value,
+    }),
+    (state) => {
+      if (typeof window === 'undefined') return
+      window.localStorage.setItem(WORKFLOW_STORAGE_KEY, JSON.stringify(state))
+    },
+    { deep: true },
+  )
 
   return {
     currentStep,

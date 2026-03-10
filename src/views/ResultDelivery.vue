@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useCreativeStore } from '@/stores/creative'
 import { useWorkflowStore } from '@/stores/workflow'
 import { getDraftTracks, extractVideoUrls, type DraftInfo } from '@/api/capcut'
@@ -11,12 +11,15 @@ import {
 import confetti from 'canvas-confetti'
 
 const router = useRouter()
+const route = useRoute()
 const creativeStore = useCreativeStore()
 const workflowStore = useWorkflowStore()
 
 // ── Video statuses from store ────────────────────────────────────
 const videoStatuses = computed(() => creativeStore.videoStatusList)
-const successVideos = computed(() => videoStatuses.value.filter((s) => s.status === 'success'))
+const successVideos = computed(() => {
+  return videoStatuses.value.filter((s) => s.status === 'success' && Boolean(s.video_url))
+})
 const failedVideos = computed(() => videoStatuses.value.filter((s) => s.status === 'failed'))
 
 // ── Fallback: extract video URLs directly from pipeline output ──
@@ -29,12 +32,45 @@ const hasVideos = computed(() => successVideos.value.length > 0 || fallbackVideo
 
 // ── Manual task_id input ─────────────────────────────────────────
 const manualTaskId = ref('')
+const manualDraftId = ref('')
 
-function handleManualTrack() {
-  const tid = manualTaskId.value.trim()
-  if (tid) {
+function parseTaskIds(value: string): string[] {
+  return value
+    .split(/[\s,，]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+async function handleManualTrack() {
+  const taskIds = parseTaskIds(manualTaskId.value)
+  const draftId = manualDraftId.value.trim()
+
+  if (draftId) {
+    creativeStore.setVideoDraftId(draftId)
+    await loadDraftInfo()
+  }
+
+  for (const tid of taskIds) {
     creativeStore.trackVideoTask(tid)
-    manualTaskId.value = ''
+  }
+
+  manualTaskId.value = ''
+  manualDraftId.value = ''
+}
+
+function restoreFromRouteQuery() {
+  const rawTaskIds = [
+    route.query.taskId,
+    route.query.taskIds,
+  ].flatMap((value) => (typeof value === 'string' ? parseTaskIds(value) : []))
+  const draftId = typeof route.query.draftId === 'string' ? route.query.draftId.trim() : ''
+
+  if (rawTaskIds.length > 0 || draftId) {
+    creativeStore.restoreResultContext({
+      taskIds: rawTaskIds,
+      draftId: draftId || null,
+      pipelineVideoStarted: true,
+    })
   }
 }
 
@@ -91,9 +127,20 @@ function triggerConfetti() {
 }
 
 onMounted(() => {
+  restoreFromRouteQuery()
+  creativeStore.resumePendingVideoPolling()
   if (hasVideos.value) triggerConfetti()
   if (creativeStore.videoDraftId) loadDraftInfo()
 })
+
+watch(
+  () => creativeStore.videoDraftId,
+  (draftId, previousDraftId) => {
+    if (draftId && draftId !== previousDraftId) {
+      void loadDraftInfo()
+    }
+  },
+)
 </script>
 
 <template>
@@ -236,11 +283,16 @@ onMounted(() => {
           <input
             v-model="manualTaskId"
             class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-purple-300 focus:outline-none"
-            placeholder="输入 task_id..."
+            placeholder="输入 task_id，支持多个（逗号或空格分隔）..."
+          />
+          <input
+            v-model="manualDraftId"
+            class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-purple-300 focus:outline-none"
+            placeholder="可选：输入 draft_id 直接恢复草稿"
           />
           <button
             class="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm hover:bg-purple-200 transition font-medium"
-            :disabled="!manualTaskId.trim()"
+            :disabled="!manualTaskId.trim() && !manualDraftId.trim()"
             @click="handleManualTrack"
           >
             查询

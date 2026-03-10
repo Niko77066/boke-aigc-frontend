@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
+import { useCreativeStore } from '@/stores/creative'
 import { ElMessage } from 'element-plus'
 
 const router = createRouter({
@@ -43,7 +44,13 @@ router.beforeEach((to, _from, next) => {
   }
 
   const workflowStore = useWorkflowStore()
+  const creativeStore = useCreativeStore()
   if (workflowStore.canAccessStep(step)) {
+    workflowStore.setCurrentStep(step === 2 ? 'result' : 'creative')
+    next()
+  } else if (step === 2 && creativeStore.hasRecoverableResult) {
+    workflowStore.unlockStep('result')
+    workflowStore.setCurrentStep('result')
     next()
   } else {
     const nearest = workflowStore.getNearestAccessibleStep()
