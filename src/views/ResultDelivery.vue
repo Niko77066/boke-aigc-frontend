@@ -69,8 +69,16 @@ const renderCompletedCount = computed(() => {
 const renderSettled = computed(() => {
   return renderTaskCount.value > 0 && creativeStore.videoAllDone
 })
+const renderTaskDiscoveryFailed = computed(() => {
+  return !hasVideos.value
+    && !creativeStore.pipelineRunning
+    && creativeStore.pipelineVideoStarted
+    && trackedTasks.value.length === 0
+    && autoDetectedTaskIds.value.length === 0
+})
 const isRendering = computed(() => {
   if (hasVideos.value) return false
+  if (renderTaskDiscoveryFailed.value) return false
   return creativeStore.pipelineVideoStarted
     || creativeStore.pipelineRunning
     || renderTaskCount.value > 0
@@ -302,6 +310,17 @@ function handleManualLookup() {
 
 function retryTaskLookup(taskId: string) {
   queryTaskIds([taskId])
+}
+
+function retryOutputRecovery() {
+  const recovered = creativeStore.recoverVideoTasksFromOutput()
+
+  if (recovered.length > 0) {
+    ElMessage.success(`已从输出中恢复 ${recovered.length} 个任务`)
+    return
+  }
+
+  ElMessage.warning('当前输出里没有识别到 task_id，请手动补查或重新制作')
 }
 
 async function handleCreateDraft() {
@@ -574,6 +593,41 @@ watch(
           <div v-if="renderSettled && deliveredVideoCount === 0" class="mt-6 flex justify-center">
             <el-button type="primary" @click="startOver">
               <RotateCw :size="16" class="mr-1" />
+              重新制作
+            </el-button>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="renderTaskDiscoveryFailed" class="render-progress-state">
+        <div class="render-progress-card is-warning">
+          <div class="render-progress-head">
+            <div class="render-progress-copy">
+              <div class="render-progress-kicker is-warning">
+                <AlertTriangle :size="14" />
+                渲染任务未返回
+              </div>
+              <h2 class="render-progress-title">没有拿到可追踪的 task_id</h2>
+              <p class="render-progress-desc">
+                本次视频流程已经结束，但前端没有从返回结果中识别到任务 ID 或成片链接，所以不会继续自动轮询。
+                你可以先手动补查 task_id，或重新尝试制作。
+              </p>
+            </div>
+            <div class="render-progress-percent is-warning">--</div>
+          </div>
+
+          <div class="warning-panel">
+            <div class="warning-panel__title">建议处理方式</div>
+            <div class="warning-panel__item">如果你手里有 task_id，直接在下方“补查任务 ID”里查询。</div>
+            <div class="warning-panel__item">如果没有 task_id，可以点“重新识别输出”，再试一次从 pipeline 输出里恢复。</div>
+            <div class="warning-panel__item">如果仍然没有结果，说明后端这次没有返回可追踪任务，直接重新制作更稳。</div>
+          </div>
+
+          <div class="warning-actions">
+            <el-button @click="retryOutputRecovery">
+              重新识别输出
+            </el-button>
+            <el-button type="primary" @click="startOver">
               重新制作
             </el-button>
           </div>
@@ -868,12 +922,20 @@ watch(
   box-shadow: 0 18px 50px rgba(124, 92, 252, 0.08);
 }
 
+.render-progress-card.is-warning {
+  box-shadow: 0 18px 50px rgba(245, 158, 11, 0.1);
+}
+
 .render-progress-head {
   @apply flex items-start justify-between gap-6 mb-6;
 }
 
 .render-progress-kicker {
   @apply inline-flex items-center gap-2 text-sm font-semibold text-purple-600 mb-3;
+}
+
+.render-progress-kicker.is-warning {
+  color: #d97706;
 }
 
 .render-progress-title {
@@ -886,6 +948,10 @@ watch(
 
 .render-progress-percent {
   @apply text-4xl font-bold text-purple-600 shrink-0;
+}
+
+.render-progress-percent.is-warning {
+  color: #d97706;
 }
 
 .progress-track {
@@ -923,6 +989,22 @@ watch(
 
 .render-progress-placeholder {
   @apply mt-6 text-sm text-gray-500 text-center;
+}
+
+.warning-panel {
+  @apply mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900;
+}
+
+.warning-panel__title {
+  @apply font-semibold mb-2;
+}
+
+.warning-panel__item {
+  @apply leading-6;
+}
+
+.warning-actions {
+  @apply mt-6 flex items-center justify-center gap-3;
 }
 
 .manual-query-panel {
