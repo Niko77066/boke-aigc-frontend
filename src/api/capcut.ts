@@ -164,6 +164,9 @@ function mergePayload(payload: unknown): Record<string, unknown> {
     if (isRecord(payload.data)) {
       Object.assign(merged, payload.data)
     }
+    if (isRecord(payload.output)) {
+      Object.assign(merged, payload.output)
+    }
   }
 
   return merged
@@ -210,6 +213,20 @@ function toCapcutNetworkError(error: unknown): Error {
     return new Error(`无法连接剪映草稿接口，请检查地址或服务状态。原始错误: ${error.message}`)
   }
   return new Error('无法连接剪映草稿接口，请检查地址或服务状态。')
+}
+
+function getEnvelopeError(payload: unknown): string | null {
+  if (!isRecord(payload)) return null
+
+  if (payload.success === false) {
+    return pickString(payload, ['error', 'message', 'detail']) || '剪映接口返回失败'
+  }
+
+  if (isRecord(payload.output) && payload.output.success === false) {
+    return pickString(payload.output, ['error', 'message', 'detail']) || '剪映接口返回失败'
+  }
+
+  return null
 }
 
 function shouldRetryArchiveDownload(error: unknown): boolean {
@@ -282,11 +299,19 @@ async function requestCapcutJson(
     return {}
   }
 
+  let parsed: unknown
   try {
-    return mergePayload(JSON.parse(rawText) as unknown)
+    parsed = JSON.parse(rawText) as unknown
   } catch {
     return { message: rawText.trim() }
   }
+
+  const envelopeError = getEnvelopeError(parsed)
+  if (envelopeError) {
+    throw new Error(envelopeError)
+  }
+
+  return mergePayload(parsed)
 }
 
 async function mcpCall<T>(toolName: string, args: Record<string, unknown>): Promise<T> {
