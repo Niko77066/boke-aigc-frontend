@@ -748,11 +748,61 @@ function getTaskExtractionTail(text: string): string {
   return tailLines.slice(-TASK_TAIL_CHAR_LIMIT)
 }
 
+const TASK_RESULT_BLOCK_PATTERN = /<TASK_RESULT>\s*([\s\S]*?)\s*<\/TASK_RESULT>/i
+
+interface TaskResultVideoEntry {
+  version?: string
+  task_id?: string
+}
+
+interface TaskResultPayload {
+  draft_id?: string
+  videos?: TaskResultVideoEntry[]
+}
+
+function extractTaskResultPayload(text: string): TaskResultPayload | null {
+  const match = text.match(TASK_RESULT_BLOCK_PATTERN)
+  if (!match?.[1]) return null
+
+  try {
+    const parsed = JSON.parse(match[1]) as unknown
+    if (!isRecord(parsed)) return null
+
+    const payload: TaskResultPayload = {}
+    const draftId = pickString(parsed, ['draft_id'])
+    if (draftId) {
+      payload.draft_id = draftId
+    }
+
+    const rawVideos = parsed.videos
+    if (Array.isArray(rawVideos)) {
+      payload.videos = rawVideos
+        .filter(isRecord)
+        .map((video) => ({
+          version: pickString(video, ['version']),
+          task_id: pickString(video, ['task_id']),
+        }))
+    }
+
+    return payload
+  } catch {
+    return null
+  }
+}
+
 /**
  * Extract ALL task_ids from pipeline output text.
  * The workflow may produce multiple videos, each with its own task_id.
  */
 export function extractAllTaskIds(text: string): string[] {
+  const taskResult = extractTaskResultPayload(text)
+  const taskResultIds = taskResult?.videos
+    ?.map((video) => video.task_id?.trim() || '')
+    .filter((taskId): taskId is string => isLikelyTaskIdCandidate(taskId))
+  if (taskResultIds && taskResultIds.length > 0) {
+    return [...new Set(taskResultIds)]
+  }
+
   const tailText = getTaskExtractionTail(text)
   const patterns = [
     /\btask[\s_-]*id\b\s*[：:=]\s*[("'`“”‘’]*([a-zA-Z0-9_-]+)[)"'`“”‘’]*/gi,
@@ -801,6 +851,11 @@ export function extractVideoUrls(text: string): string[] {
  * Extract draft_id from pipeline output text.
  */
 export function extractDraftId(text: string): string | null {
+  const taskResult = extractTaskResultPayload(text)
+  if (taskResult?.draft_id?.trim()) {
+    return taskResult.draft_id.trim()
+  }
+
   const patterns = [
     /\bdraft[\s_-]*id\b\s*[：:=]\s*[("'`“”‘’]*([a-zA-Z0-9_-]+)[)"'`“”‘’]*/i,
     /draft_id["\s]*[：:=]\s*["']?([a-zA-Z0-9_-]+)["']?/i,
