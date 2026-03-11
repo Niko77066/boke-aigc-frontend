@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCreativeStore } from '@/stores/creative'
 import { useWorkflowStore } from '@/stores/workflow'
+import { ElMessage } from 'element-plus'
 import {
-  getDraftTracks,
   extractAllTaskIds,
   extractVideoUrls,
-  type DraftInfo,
 } from '@/api/capcut'
 import {
   Film, Download, ExternalLink, Video, RotateCw, CheckCircle2,
-  AlertTriangle, Layers, Clock, Loader2,
+  AlertTriangle, Clock, Loader2,
 } from 'lucide-vue-next'
 import confetti from 'canvas-confetti'
 
@@ -48,13 +47,14 @@ const autoDetectedTaskIds = computed(() => extractAllTaskIds(creativeStore.pipel
 const expectedVideoCount = computed(() => EXPECTED_VIDEO_COUNT)
 const hasVideos = computed(() => {
   if (successVideos.value.length > 0) {
-    return successVideos.value.length >= expectedVideoCount.value
+    return true
   }
-  return fallbackVideoUrls.value.length >= expectedVideoCount.value
+  return fallbackVideoUrls.value.length > 0
 })
 const deliveredVideoCount = computed(() => {
   return successVideos.value.length || fallbackVideoUrls.value.length
 })
+const missingVideoCount = computed(() => Math.max(0, expectedVideoCount.value - deliveredVideoCount.value))
 const renderTaskCount = computed(() => {
   return trackedTasks.value.length || Math.min(autoDetectedTaskIds.value.length, EXPECTED_VIDEO_COUNT)
 })
@@ -70,6 +70,14 @@ const isRendering = computed(() => {
     || creativeStore.pipelineRunning
     || renderTaskCount.value > 0
 })
+const showManualLookup = computed(() => {
+  return failedVideos.value.length > 0
+    || deliveredVideoCount.value < expectedVideoCount.value
+    || trackedTasks.value.length > 0
+    || !hasVideos.value
+})
+const manualTaskIds = ref('')
+const manualLookupBusy = ref(false)
 
 function getTaskProgress(task: { status: string; progress?: number }): number {
   if (task.status === 'success' || task.status === 'failed') return 100
@@ -93,7 +101,7 @@ const overallProgress = computed(() => {
 })
 
 const progressTitle = computed(() => {
-  if (renderSettled.value && deliveredVideoCount.value < expectedVideoCount.value) {
+  if (renderSettled.value && deliveredVideoCount.value === 0) {
     return '渲染失败'
   }
   if (renderTaskCount.value > 0) {
@@ -106,11 +114,11 @@ const progressTitle = computed(() => {
 })
 
 const progressDescription = computed(() => {
-  if (renderSettled.value && deliveredVideoCount.value < expectedVideoCount.value) {
-    return `渲染任务已结束，但只拿到 ${deliveredVideoCount.value}/${expectedVideoCount.value} 个成片，请重新制作。`
+  if (renderSettled.value && deliveredVideoCount.value === 0) {
+    return '渲染任务已结束，但没有拿到可播放的视频，请重新制作。'
   }
   if (renderTaskCount.value > 0) {
-    return `已完成 ${renderCompletedCount.value}/${expectedVideoCount.value || renderTaskCount.value} 个视频渲染，请稍候，完成后会自动展示成片。`
+    return `已完成 ${renderCompletedCount.value}/${expectedVideoCount.value || renderTaskCount.value} 个视频渲染，拿到视频链接后会自动展示成片。`
   }
   return '系统正在接收渲染任务并同步进度，请稍候。'
 })
@@ -120,6 +128,37 @@ function parseTaskIds(value: string): string[] {
     .split(/[\s,，]+/)
     .map((item) => item.trim())
     .filter(Boolean)
+}
+
+function getTaskStatusLabel(status: string): string {
+  if (status === 'success') return '已拿到视频'
+  if (status === 'failed') return '查询失败'
+  if (status === 'processing') return '渲染中'
+  return '待查询'
+}
+
+function queryTaskIds(taskIds: string[]) {
+  const uniqueTaskIds = [...new Set(taskIds.map((item) => item.trim()).filter(Boolean))]
+  if (uniqueTaskIds.length === 0) {
+    ElMessage.warning('请输入 task_id')
+    return
+  }
+
+  manualLookupBusy.value = true
+  for (const taskId of uniqueTaskIds) {
+    creativeStore.trackVideoTask(taskId)
+  }
+  manualTaskIds.value = ''
+  manualLookupBusy.value = false
+  ElMessage.success(`已发起 ${uniqueTaskIds.length} 个任务查询`)
+}
+
+function handleManualLookup() {
+  queryTaskIds(parseTaskIds(manualTaskIds.value))
+}
+
+function retryTaskLookup(taskId: string) {
+  queryTaskIds([taskId])
 }
 
 function restoreFromRouteQuery() {
@@ -135,25 +174,6 @@ function restoreFromRouteQuery() {
       draftId: draftId || null,
       pipelineVideoStarted: true,
     })
-  }
-}
-
-// ── Draft info ───────────────────────────────────────────────────
-const draftInfo = ref<DraftInfo | null>(null)
-const draftLoading = ref(false)
-const draftError = ref<string | null>(null)
-
-async function loadDraftInfo() {
-  const did = creativeStore.videoDraftId
-  if (!did) return
-  draftLoading.value = true
-  draftError.value = null
-  try {
-    draftInfo.value = await getDraftTracks(did)
-  } catch (e) {
-    draftError.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    draftLoading.value = false
   }
 }
 
@@ -197,17 +217,7 @@ onMounted(() => {
   }
   creativeStore.resumePendingVideoPolling()
   if (hasVideos.value) triggerConfetti()
-  if (creativeStore.videoDraftId) loadDraftInfo()
 })
-
-watch(
-  () => creativeStore.videoDraftId,
-  (draftId, previousDraftId) => {
-    if (draftId && draftId !== previousDraftId) {
-      void loadDraftInfo()
-    }
-  },
-)
 
 watch(
   hasVideos,
@@ -225,7 +235,7 @@ watch(
     <div class="page-header p-5">
       <h1 class="page-title text-2xl font-bold text-gray-900">成片交付</h1>
       <p class="page-desc text-sm text-gray-500 mt-1">
-        预览 AI 产线自动生成的营销视频，下载成片或查看剪映草稿
+        预览 AI 产线自动生成的营销视频，并直接下载成片
       </p>
     </div>
 
@@ -286,7 +296,7 @@ watch(
             系统正在接收渲染任务，完成后会自动展示视频成片。
           </div>
 
-          <div v-if="renderSettled && deliveredVideoCount < expectedVideoCount" class="mt-6 flex justify-center">
+          <div v-if="renderSettled && deliveredVideoCount === 0" class="mt-6 flex justify-center">
             <el-button type="primary" @click="startOver">
               <RotateCw :size="16" class="mr-1" />
               重新制作
@@ -371,43 +381,6 @@ watch(
           </div>
         </div>
 
-        <!-- Draft info card -->
-        <div v-if="creativeStore.videoDraftId" class="draft-section mt-6">
-          <div class="flex items-center gap-2 mb-3">
-            <Layers :size="18" class="text-purple-500" />
-            <h3 class="text-base font-semibold text-gray-900">剪映草稿信息</h3>
-          </div>
-
-          <div v-if="draftLoading" class="flex items-center gap-2 text-sm text-gray-500">
-            <Loader2 :size="16" class="animate-spin" />
-            加载草稿信息中...
-          </div>
-
-          <div v-else-if="draftError" class="text-sm text-red-500">
-            草稿信息加载失败: {{ draftError }}
-          </div>
-
-          <div v-else-if="draftInfo" class="draft-card">
-            <div class="text-xs text-gray-500 mb-3">草稿 ID: {{ draftInfo.draft_id }}</div>
-            <div class="tracks-grid">
-              <div
-                v-for="track in draftInfo.tracks"
-                :key="track.name"
-                class="track-item"
-              >
-                <div class="track-name">{{ track.name }}</div>
-                <div class="track-meta">
-                  <span>类型: {{ track.type }}</span>
-                  <span>片段: {{ track.segment_count }}</span>
-                  <span v-if="track.end_time">时长: {{ formatDuration(track.end_time) }}</span>
-                  <span v-if="track.muted" class="text-orange-500">已静音</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div v-else class="text-sm text-gray-400">暂无草稿详情</div>
-        </div>
       </div>
 
       <!-- No results -->
@@ -418,6 +391,50 @@ watch(
         <el-button type="primary" @click="router.push('/creative')">
           前往创意控制台
         </el-button>
+      </div>
+    </div>
+
+    <div v-if="showManualLookup" class="manual-query-panel glass-morphism rounded-2xl p-5">
+      <div class="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h3 class="text-base font-semibold text-gray-900">补查任务 ID</h3>
+          <p class="text-sm text-gray-500 mt-1">
+            <template v-if="missingVideoCount > 0">
+              当前还缺少 {{ missingVideoCount }} 个视频，可以手动输入 task_id 直接查询视频链接。
+            </template>
+            <template v-else>
+              可以手动输入 task_id 重新查询当前任务状态。
+            </template>
+          </p>
+        </div>
+      </div>
+
+      <div class="manual-query-form">
+        <el-input
+          v-model="manualTaskIds"
+          placeholder="输入一个或多个 task_id，支持空格或逗号分隔"
+          clearable
+          @keyup.enter="handleManualLookup"
+        />
+        <el-button type="primary" :loading="manualLookupBusy" @click="handleManualLookup">
+          查询 task_id
+        </el-button>
+      </div>
+
+      <div v-if="trackedTasks.length > 0" class="manual-query-tasks">
+        <div
+          v-for="task in trackedTasks"
+          :key="task.task_id"
+          class="manual-query-task"
+        >
+          <div class="min-w-0">
+            <div class="manual-query-task__id">{{ task.task_id }}</div>
+            <div class="manual-query-task__meta">{{ getTaskStatusLabel(task.status) }}</div>
+          </div>
+          <el-button text type="primary" @click="retryTaskLookup(task.task_id)">
+            重新查询
+          </el-button>
+        </div>
       </div>
     </div>
 
@@ -525,6 +542,31 @@ watch(
   @apply mt-6 text-sm text-gray-500 text-center;
 }
 
+.manual-query-panel {
+  @apply bg-white border border-gray-200;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.manual-query-form {
+  @apply flex items-center gap-3;
+}
+
+.manual-query-tasks {
+  @apply grid gap-3 mt-4;
+}
+
+.manual-query-task {
+  @apply flex items-center justify-between gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50;
+}
+
+.manual-query-task__id {
+  @apply text-sm font-medium text-gray-800 truncate;
+}
+
+.manual-query-task__meta {
+  @apply text-xs text-gray-500 mt-1;
+}
+
 /* ── Video cards ──────────────────────────────── */
 .video-card {
   @apply p-4 rounded-2xl border border-gray-200 bg-white;
@@ -594,5 +636,8 @@ watch(
 :deep(.el-button--primary:hover) {
   background-color: var(--brand-primary-dark);
   border-color: var(--brand-primary-dark);
+}
+:deep(.el-input__wrapper) {
+  border-radius: 10px;
 }
 </style>
