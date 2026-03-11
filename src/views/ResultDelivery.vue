@@ -5,9 +5,14 @@ import { useCreativeStore } from '@/stores/creative'
 import { useWorkflowStore } from '@/stores/workflow'
 import { ElMessage } from 'element-plus'
 import {
+  createDraft,
   extractAllTaskIds,
+  getDraftArchiveDownload,
+  pollDraftArchiveDownload,
+  saveDraftArchive,
   extractVideoUrls,
 } from '@/api/capcut'
+import type { DraftArchiveDownloadResponse } from '@/api/capcut'
 import {
   Film, Download, ExternalLink, Video, RotateCw, CheckCircle2,
   AlertTriangle, Clock, Loader2,
@@ -76,8 +81,131 @@ const showManualLookup = computed(() => {
     || trackedTasks.value.length > 0
     || !hasVideos.value
 })
+const currentDraftId = computed(() => creativeStore.videoDraftId?.trim() || '')
 const manualTaskIds = ref('')
 const manualLookupBusy = ref(false)
+const draftName = ref('')
+const draftWidth = ref(1080)
+const draftHeight = ref(1920)
+const draftFolder = ref('')
+const createDraftBusy = ref(false)
+const archiveDraftBusy = ref(false)
+const downloadDraftBusy = ref(false)
+const archiveFeedback = ref('')
+const archiveLocation = ref('')
+const archivePending = ref(false)
+const archiveReady = ref(false)
+const archiveError = ref('')
+const readyArchiveDownload = ref<DraftArchiveDownloadResponse | null>(null)
+
+let archivePollToken = 0
+
+function buildDefaultDraftName(): string {
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')
+  return `boke-draft-${stamp}`
+}
+
+const draftResolutionLabel = computed(() => `${draftWidth.value} x ${draftHeight.value}`)
+const canDownloadArchive = computed(() => {
+  return Boolean(currentDraftId.value) && !archivePending.value && !archiveDraftBusy.value
+})
+const draftStatusMeta = computed(() => {
+  if (!currentDraftId.value) {
+    return {
+      tone: 'idle',
+      label: '未创建草稿',
+      title: '先创建一个剪映草稿',
+      description: '当前结果页还没有关联到 draft_id。创建后才能继续归档和下载。',
+    }
+  }
+
+  if (archiveDraftBusy.value) {
+    return {
+      tone: 'working',
+      label: '提交归档中',
+      title: '正在提交草稿归档任务',
+      description: '系统正在把当前 draft_id 发送到剪映归档接口。',
+    }
+  }
+
+  if (archivePending.value) {
+    return {
+      tone: 'working',
+      label: '归档生成中',
+      title: '归档包正在后台生成',
+      description: '归档接口已接收请求，系统会持续检查下载链接，准备好后会自动切换为可下载状态。',
+    }
+  }
+
+  if (archiveReady.value) {
+    return {
+      tone: 'success',
+      label: '归档已就绪',
+      title: '草稿归档包已经可下载',
+      description: '可以直接点击下载归档，拿到剪映草稿包。',
+    }
+  }
+
+  if (archiveError.value) {
+    return {
+      tone: 'error',
+      label: '归档检查失败',
+      title: '归档状态暂时不可确认',
+      description: archiveError.value,
+    }
+  }
+
+  return {
+    tone: 'ready',
+    label: '草稿已关联',
+    title: '当前成片已绑定剪映草稿',
+    description: '可以填写归档目录并发起归档。归档完成后会显示明确的下载状态。',
+  }
+})
+
+function setArchiveIdleState() {
+  archivePending.value = false
+  archiveReady.value = false
+  archiveError.value = ''
+  archiveFeedback.value = ''
+  archiveLocation.value = ''
+  readyArchiveDownload.value = null
+}
+
+async function waitForArchiveReady(draftId: string) {
+  const token = ++archivePollToken
+
+  archivePending.value = true
+  archiveReady.value = false
+  archiveError.value = ''
+  readyArchiveDownload.value = null
+  archiveFeedback.value = '归档任务已提交，正在等待归档包生成...'
+
+  try {
+    const result = await pollDraftArchiveDownload(draftId, {
+      intervalMs: 3000,
+      timeoutMs: 180000,
+    })
+
+    if (token !== archivePollToken) return
+
+    archivePending.value = false
+    archiveReady.value = true
+    archiveError.value = ''
+    readyArchiveDownload.value = result
+    archiveFeedback.value = '归档包已生成，可以直接下载。'
+    if (result.url) {
+      archiveLocation.value = result.url
+    }
+  } catch (error) {
+    if (token !== archivePollToken) return
+
+    archivePending.value = false
+    archiveReady.value = false
+    archiveError.value = error instanceof Error ? error.message : '归档状态查询失败'
+    archiveFeedback.value = '归档任务已提交，但下载链接暂未就绪。'
+  }
+}
 
 function getTaskProgress(task: { status: string; progress?: number }): number {
   if (task.status === 'success' || task.status === 'failed') return 100
@@ -176,6 +304,117 @@ function retryTaskLookup(taskId: string) {
   queryTaskIds([taskId])
 }
 
+async function handleCreateDraft() {
+  const name = draftName.value.trim()
+  if (!name) {
+    ElMessage.warning('请输入草稿名称')
+    return
+  }
+
+  createDraftBusy.value = true
+  setArchiveIdleState()
+
+  try {
+    const draft = await createDraft({
+      name,
+      width: draftWidth.value,
+      height: draftHeight.value,
+    })
+    creativeStore.setVideoDraftId(draft.draft_id)
+    ElMessage.success(`草稿创建成功：${draft.draft_id}`)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '创建草稿失败')
+  } finally {
+    createDraftBusy.value = false
+  }
+}
+
+async function handleArchiveDraft() {
+  const draftId = currentDraftId.value
+  const folder = draftFolder.value.trim()
+
+  if (!draftId) {
+    ElMessage.warning('当前没有可归档的 draft_id')
+    return
+  }
+  if (!folder) {
+    ElMessage.warning('请输入归档目录')
+    return
+  }
+
+  archiveDraftBusy.value = true
+  archiveReady.value = false
+  archiveError.value = ''
+  archiveFeedback.value = ''
+  archiveLocation.value = ''
+  readyArchiveDownload.value = null
+
+  try {
+    const result = await saveDraftArchive({
+      draft_id: draftId,
+      draft_folder: folder,
+    })
+    archiveFeedback.value = result.message || '已发起草稿归档，归档包生成后可下载'
+    archiveLocation.value = result.archive_path || result.archive_url || ''
+    ElMessage.success(archiveFeedback.value)
+    void waitForArchiveReady(draftId)
+  } catch (error) {
+    archivePending.value = false
+    archiveReady.value = false
+    archiveError.value = error instanceof Error ? error.message : '草稿归档失败'
+    ElMessage.error(error instanceof Error ? error.message : '草稿归档失败')
+  } finally {
+    archiveDraftBusy.value = false
+  }
+}
+
+async function handleDownloadDraft() {
+  const draftId = currentDraftId.value
+  if (!draftId) {
+    ElMessage.warning('当前没有可下载的 draft_id')
+    return
+  }
+
+  downloadDraftBusy.value = true
+
+  try {
+    const result = readyArchiveDownload.value
+      ?? await getDraftArchiveDownload(draftId)
+
+    if (result.url) {
+      window.open(result.url, '_blank', 'noopener,noreferrer')
+      archivePending.value = false
+      archiveReady.value = true
+      readyArchiveDownload.value = result
+      archiveLocation.value = result.url
+      ElMessage.success('已打开归档下载链接')
+      return
+    }
+
+    if (result.blob) {
+      const objectUrl = URL.createObjectURL(result.blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = result.filename || `${draftId}.zip`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+      archivePending.value = false
+      archiveReady.value = true
+      readyArchiveDownload.value = result
+      ElMessage.success('归档下载已开始')
+      return
+    }
+
+    throw new Error('下载接口未返回可用内容')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '归档下载失败')
+  } finally {
+    downloadDraftBusy.value = false
+  }
+}
+
 function restoreFromRouteQuery() {
   const rawTaskIds = [
     route.query.taskId,
@@ -226,6 +465,7 @@ function triggerConfetti() {
 }
 
 onMounted(() => {
+  draftName.value = buildDefaultDraftName()
   restoreFromRouteQuery()
   if (creativeStore.videoTaskIds.length === 0 && creativeStore.pipelineOutput) {
     creativeStore.recoverVideoTasksFromOutput()
@@ -239,6 +479,23 @@ watch(
   (value, previousValue) => {
     if (value && !previousValue) {
       triggerConfetti()
+    }
+  },
+)
+
+watch(
+  currentDraftId,
+  (value) => {
+    if (!value) {
+      setArchiveIdleState()
+      if (!draftName.value) {
+        draftName.value = buildDefaultDraftName()
+      }
+      return
+    }
+
+    if (!draftName.value) {
+      draftName.value = buildDefaultDraftName()
     }
   },
 )
@@ -412,6 +669,107 @@ watch(
       </div>
     </div>
 
+    <div class="draft-panel glass-morphism rounded-2xl p-5">
+      <div class="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h3 class="text-base font-semibold text-gray-900">剪映草稿</h3>
+          <p class="text-sm text-gray-500 mt-1">
+            <template v-if="currentDraftId">
+              当前成片已关联剪映草稿，可以直接归档并下载。
+            </template>
+            <template v-else>
+              当前没有 `draft_id`，可以先创建一个空白剪映草稿。
+            </template>
+          </p>
+        </div>
+        <div v-if="currentDraftId" class="draft-chip">
+          draft_id: {{ currentDraftId }}
+        </div>
+      </div>
+
+      <div class="draft-status-card" :class="`is-${draftStatusMeta.tone}`">
+        <div class="draft-status-main">
+          <div class="draft-status-badge" :class="`is-${draftStatusMeta.tone}`">
+            <Loader2 v-if="draftStatusMeta.tone === 'working'" :size="14" class="animate-spin" />
+            <CheckCircle2 v-else-if="draftStatusMeta.tone === 'success'" :size="14" />
+            <AlertTriangle v-else-if="draftStatusMeta.tone === 'error'" :size="14" />
+            <Clock v-else :size="14" />
+            {{ draftStatusMeta.label }}
+          </div>
+          <div class="draft-status-title">{{ draftStatusMeta.title }}</div>
+          <div class="draft-status-desc">{{ draftStatusMeta.description }}</div>
+        </div>
+
+        <div class="draft-step-row">
+          <div class="draft-step" :class="{ done: Boolean(currentDraftId) }">
+            <div class="draft-step-dot">1</div>
+            <div class="draft-step-label">创建草稿</div>
+          </div>
+          <div class="draft-step-line" :class="{ done: Boolean(currentDraftId) && (archivePending || archiveReady || archiveError) }"></div>
+          <div class="draft-step" :class="{ done: archivePending || archiveReady || archiveError, active: archivePending }">
+            <div class="draft-step-dot">2</div>
+            <div class="draft-step-label">发起归档</div>
+          </div>
+          <div class="draft-step-line" :class="{ done: archiveReady }"></div>
+          <div class="draft-step" :class="{ done: archiveReady, active: downloadDraftBusy }">
+            <div class="draft-step-dot">3</div>
+            <div class="draft-step-label">下载归档</div>
+          </div>
+        </div>
+
+        <div class="draft-meta-grid">
+          <div class="draft-meta-item">
+            <div class="draft-meta-label">Draft ID</div>
+            <div class="draft-meta-value">{{ currentDraftId || '未创建' }}</div>
+          </div>
+          <div class="draft-meta-item">
+            <div class="draft-meta-label">Draft Name</div>
+            <div class="draft-meta-value">{{ draftName || '-' }}</div>
+          </div>
+          <div class="draft-meta-item">
+            <div class="draft-meta-label">Resolution</div>
+            <div class="draft-meta-value">{{ draftResolutionLabel }}</div>
+          </div>
+          <div class="draft-meta-item">
+            <div class="draft-meta-label">Archive Folder</div>
+            <div class="draft-meta-value">{{ draftFolder || '未填写' }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="!currentDraftId" class="draft-create-grid">
+        <el-input v-model="draftName" placeholder="输入草稿名称" clearable />
+        <el-input-number v-model="draftWidth" :min="1" :step="1" controls-position="right" />
+        <el-input-number v-model="draftHeight" :min="1" :step="1" controls-position="right" />
+        <el-button type="primary" :loading="createDraftBusy" @click="handleCreateDraft">
+          创建剪映草稿
+        </el-button>
+      </div>
+
+      <div v-else class="draft-archive-grid">
+        <el-input
+          v-model="draftFolder"
+          placeholder="输入归档目录，例如 C:/"
+          clearable
+          @keyup.enter="handleArchiveDraft"
+        />
+        <div class="draft-action-row">
+          <el-button type="primary" :loading="archiveDraftBusy" @click="handleArchiveDraft">
+            归档草稿
+          </el-button>
+          <el-button :disabled="!canDownloadArchive" :loading="downloadDraftBusy" @click="handleDownloadDraft">
+            {{ archivePending ? '归档生成中...' : archiveReady ? '下载归档' : '检查并下载' }}
+          </el-button>
+        </div>
+        <div v-if="archiveFeedback || archiveLocation" class="draft-feedback">
+          <div v-if="archiveFeedback">{{ archiveFeedback }}</div>
+          <div v-if="archiveLocation" class="break-all text-gray-500">
+            {{ archiveLocation }}
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showManualLookup" class="manual-query-panel glass-morphism rounded-2xl p-5">
       <div class="flex items-start justify-between gap-4 mb-4">
         <div>
@@ -572,6 +930,153 @@ watch(
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
+.draft-panel {
+  @apply bg-white border border-gray-200;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.draft-chip {
+  @apply shrink-0 rounded-full bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700;
+}
+
+.draft-status-card {
+  @apply rounded-2xl border px-4 py-4 mb-4;
+}
+
+.draft-status-card.is-idle,
+.draft-status-card.is-ready {
+  @apply border-gray-200 bg-gray-50;
+}
+
+.draft-status-card.is-working {
+  border-color: #d8b4fe;
+  background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%);
+}
+
+.draft-status-card.is-success {
+  border-color: #86efac;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+}
+
+.draft-status-card.is-error {
+  border-color: #fca5a5;
+  background: linear-gradient(135deg, #fff1f2 0%, #fff7ed 100%);
+}
+
+.draft-status-main {
+  @apply flex flex-col gap-2;
+}
+
+.draft-status-badge {
+  @apply inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold;
+}
+
+.draft-status-badge.is-idle,
+.draft-status-badge.is-ready {
+  @apply bg-white text-gray-600 border border-gray-200;
+}
+
+.draft-status-badge.is-working {
+  color: #7c3aed;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.draft-status-badge.is-success {
+  color: #15803d;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.draft-status-badge.is-error {
+  color: #dc2626;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.draft-status-title {
+  @apply text-lg font-semibold text-gray-900;
+}
+
+.draft-status-desc {
+  @apply text-sm leading-6 text-gray-600;
+}
+
+.draft-step-row {
+  @apply mt-4 flex items-center gap-2;
+}
+
+.draft-step {
+  @apply flex min-w-0 items-center gap-2 text-sm text-gray-400;
+}
+
+.draft-step.active {
+  color: #7c3aed;
+}
+
+.draft-step.done {
+  color: #111827;
+}
+
+.draft-step-dot {
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-semibold;
+}
+
+.draft-step.active .draft-step-dot {
+  border-color: #c084fc;
+  color: #7c3aed;
+}
+
+.draft-step.done .draft-step-dot {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.draft-step-label {
+  @apply whitespace-nowrap;
+}
+
+.draft-step-line {
+  @apply h-px flex-1 bg-gray-200;
+}
+
+.draft-step-line.done {
+  background: linear-gradient(90deg, #86efac 0%, #c084fc 100%);
+}
+
+.draft-meta-grid {
+  @apply mt-4 grid gap-3;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.draft-meta-item {
+  @apply rounded-xl border border-white/70 bg-white/80 px-3 py-3;
+}
+
+.draft-meta-label {
+  @apply text-xs uppercase tracking-wide text-gray-400;
+}
+
+.draft-meta-value {
+  @apply mt-2 text-sm font-medium text-gray-800 break-all;
+}
+
+.draft-create-grid {
+  @apply grid gap-3 items-center;
+  grid-template-columns: minmax(0, 1.8fr) 120px 120px auto;
+}
+
+.draft-archive-grid {
+  @apply grid gap-3;
+  grid-template-columns: minmax(0, 1.6fr) auto;
+}
+
+.draft-action-row {
+  @apply flex items-center gap-3;
+}
+
+.draft-feedback {
+  @apply col-span-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700;
+}
+
 .manual-query-form {
   @apply flex items-center gap-3;
 }
@@ -668,5 +1173,28 @@ watch(
 }
 :deep(.el-input__wrapper) {
   border-radius: 10px;
+}
+
+@media (max-width: 960px) {
+  .draft-create-grid,
+  .draft-archive-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .draft-step-row {
+    @apply flex-col items-stretch;
+  }
+
+  .draft-step-line {
+    @apply h-6 w-px ml-3.5;
+  }
+
+  .draft-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .draft-feedback {
+    @apply col-span-1;
+  }
 }
 </style>

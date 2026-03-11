@@ -10,9 +10,14 @@
  *   - video_task_status is polled via direct HTTP API
  */
 
+import { getCapcutApiBaseUrl, getCapcutApiKey } from '@/config/runtime'
+
 const CAPCUT_MCP_URL = 'https://cutapi.koxagent.com/cutmcp/mcp'
 const CAPCUT_STATUS_URL = 'https://cutapi.koxagent.com/video_task_status'
 const CAPCUT_SECRET = 'cc94f2a95d7d2bdacd522ff619e4a898:8bf3bde7f8e481437b3e0d8bf54c1ddb753834706b9655645ffb648fda:ba02bf4abd1b72da80a0198dd9202e8f'
+const CAPCUT_DRAFTS_CREATE_PATH = '/api/capcut/drafts/create'
+const CAPCUT_ARCHIVES_SAVE_PATH = '/api/capcut/archives/save'
+const CAPCUT_ARCHIVES_DOWNLOAD_PATH = '/api/capcut/archives/download'
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -65,6 +70,47 @@ export interface DraftInfo {
   tracks: DraftTrack[]
 }
 
+export interface CreateDraftPayload {
+  name: string
+  width?: number
+  height?: number
+  framerate?: '30.0' | '50.0' | '60.0'
+}
+
+export interface CreateDraftResponse {
+  draft_id: string
+  name?: string
+  width?: number
+  height?: number
+  framerate?: string
+  [key: string]: unknown
+}
+
+export interface SaveDraftArchivePayload {
+  draft_id: string
+  draft_folder: string
+}
+
+export interface SaveDraftArchiveResponse {
+  draft_id: string
+  archive_path?: string
+  archive_url?: string
+  message?: string
+  [key: string]: unknown
+}
+
+export interface DraftArchiveDownloadResponse {
+  draft_id: string
+  url?: string
+  filename?: string
+  blob?: Blob
+}
+
+interface PollArchiveDownloadOptions {
+  intervalMs?: number
+  timeoutMs?: number
+}
+
 // ── MCP JSON-RPC call helper ────────────────────────────────────
 
 interface MCPRequest {
@@ -83,6 +129,112 @@ interface MCPResponse {
 }
 
 let requestId = 1
+
+function buildCapcutApiUrl(path: string): string {
+  const baseUrl = getCapcutApiBaseUrl()
+  return `${baseUrl}${path}`
+}
+
+function getCapcutApiHeaders(includeJson: boolean = true): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  }
+
+  if (includeJson) {
+    headers['Content-Type'] = 'application/json'
+  }
+
+  const apiKey = getCapcutApiKey()
+  if (apiKey) {
+    headers['x-api-key'] = apiKey
+  }
+
+  return headers
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function mergePayload(payload: unknown): Record<string, unknown> {
+  const merged: Record<string, unknown> = {}
+
+  if (isRecord(payload)) {
+    Object.assign(merged, payload)
+    if (isRecord(payload.data)) {
+      Object.assign(merged, payload.data)
+    }
+  }
+
+  return merged
+}
+
+function pickString(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+  return undefined
+}
+
+function pickNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value
+    }
+  }
+  return undefined
+}
+
+function getDownloadFilename(contentDisposition: string | null, fallback: string): string {
+  if (!contentDisposition) return fallback
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1])
+  }
+
+  const plainMatch = contentDisposition.match(/filename="?([^"]+)"?/i)
+  if (plainMatch?.[1]) {
+    return plainMatch[1]
+  }
+
+  return fallback
+}
+
+function toCapcutNetworkError(error: unknown): Error {
+  if (error instanceof Error) {
+    return new Error(`无法连接剪映草稿接口，请检查地址或服务状态。原始错误: ${error.message}`)
+  }
+  return new Error('无法连接剪映草稿接口，请检查地址或服务状态。')
+}
+
+function shouldRetryArchiveDownload(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+
+  const message = error.message.toLowerCase()
+  return [
+    'not ready',
+    'not found',
+    'processing',
+    'pending',
+    'building',
+    'archive',
+    'preparing',
+    '生成中',
+    '归档中',
+    '处理中',
+    '暂未',
+    '未就绪',
+    '稍后',
+    '请稍后',
+    '不存在',
+    '失败',
+  ].some((token) => message.includes(token))
+}
 
 function parseErrorMessage(rawText: string, fallback: string): string {
   let message = fallback
@@ -105,6 +257,36 @@ function parseErrorMessage(rawText: string, fallback: string): string {
   }
 
   return message
+}
+
+async function requestCapcutJson(
+  path: string,
+  init: RequestInit,
+  fallbackMessage: string,
+): Promise<Record<string, unknown>> {
+  let res: Response
+
+  try {
+    res = await fetch(buildCapcutApiUrl(path), init)
+  } catch (error) {
+    throw toCapcutNetworkError(error)
+  }
+
+  const rawText = await res.text()
+
+  if (!res.ok) {
+    throw new Error(parseErrorMessage(rawText, fallbackMessage))
+  }
+
+  if (!rawText.trim()) {
+    return {}
+  }
+
+  try {
+    return mergePayload(JSON.parse(rawText) as unknown)
+  } catch {
+    return { message: rawText.trim() }
+  }
 }
 
 async function mcpCall<T>(toolName: string, args: Record<string, unknown>): Promise<T> {
@@ -222,6 +404,130 @@ export async function getVideoTaskStatus(taskId: string): Promise<VideoTaskStatu
 export async function getDraftTracks(draftId: string): Promise<DraftInfo> {
   const tracks = await mcpCall<DraftTrack[]>('get_tracks', { draft_id: draftId })
   return { draft_id: draftId, tracks }
+}
+
+export async function createDraft(payload: CreateDraftPayload): Promise<CreateDraftResponse> {
+  const data = await requestCapcutJson(
+    CAPCUT_DRAFTS_CREATE_PATH,
+    {
+      method: 'POST',
+      headers: getCapcutApiHeaders(),
+      body: JSON.stringify(payload),
+    },
+    '创建剪映草稿失败',
+  )
+
+  const draftId = pickString(data, ['draft_id', 'id'])
+  if (!draftId) {
+    throw new Error('创建剪映草稿成功，但返回缺少 draft_id')
+  }
+
+  return {
+    ...data,
+    draft_id: draftId,
+    name: pickString(data, ['name']),
+    width: pickNumber(data, ['width']),
+    height: pickNumber(data, ['height']),
+    framerate: pickString(data, ['framerate']),
+  }
+}
+
+export async function saveDraftArchive(payload: SaveDraftArchivePayload): Promise<SaveDraftArchiveResponse> {
+  const data = await requestCapcutJson(
+    CAPCUT_ARCHIVES_SAVE_PATH,
+    {
+      method: 'POST',
+      headers: getCapcutApiHeaders(),
+      body: JSON.stringify(payload),
+    },
+    '归档剪映草稿失败',
+  )
+
+  return {
+    ...data,
+    draft_id: pickString(data, ['draft_id']) ?? payload.draft_id,
+    archive_path: pickString(data, ['archive_path', 'path', 'file_path']),
+    archive_url: pickString(data, ['archive_url', 'url']),
+    message: pickString(data, ['message', 'detail']),
+  }
+}
+
+export async function getDraftArchiveDownload(draftId: string): Promise<DraftArchiveDownloadResponse> {
+  const url = new URL(buildCapcutApiUrl(CAPCUT_ARCHIVES_DOWNLOAD_PATH), window.location.origin)
+  url.searchParams.set('draft_id', draftId)
+
+  let res: Response
+
+  try {
+    res = await fetch(url.toString(), {
+      method: 'GET',
+      headers: getCapcutApiHeaders(false),
+    })
+  } catch (error) {
+    throw toCapcutNetworkError(error)
+  }
+
+  if (!res.ok) {
+    const rawText = await res.text()
+    throw new Error(parseErrorMessage(rawText, '获取草稿归档下载链接失败'))
+  }
+
+  const contentType = (res.headers.get('content-type') || '').toLowerCase()
+  const filename = getDownloadFilename(res.headers.get('content-disposition'), `${draftId}.zip`)
+
+  if (contentType.includes('application/json')) {
+    const payload = mergePayload(await res.json().catch(() => null))
+    const downloadUrl = pickString(payload, ['download_url', 'download_link', 'archive_url', 'url', 'signed_url'])
+
+    if (!downloadUrl) {
+      throw new Error(pickString(payload, ['message', 'detail', 'error']) || '下载接口未返回可用链接')
+    }
+
+    return {
+      draft_id: draftId,
+      url: downloadUrl,
+      filename: pickString(payload, ['filename', 'file_name']) ?? filename,
+    }
+  }
+
+  if (contentType.startsWith('text/')) {
+    const text = (await res.text()).trim()
+
+    if (/^https?:\/\//i.test(text)) {
+      return { draft_id: draftId, url: text, filename }
+    }
+
+    throw new Error(text || '下载接口返回为空')
+  }
+
+  return {
+    draft_id: draftId,
+    filename,
+    blob: await res.blob(),
+  }
+}
+
+export async function pollDraftArchiveDownload(
+  draftId: string,
+  options: PollArchiveDownloadOptions = {},
+): Promise<DraftArchiveDownloadResponse> {
+  const intervalMs = options.intervalMs ?? 3000
+  const timeoutMs = options.timeoutMs ?? 120000
+  const start = Date.now()
+
+  while (Date.now() - start < timeoutMs) {
+    try {
+      return await getDraftArchiveDownload(draftId)
+    } catch (error) {
+      if (!shouldRetryArchiveDownload(error)) {
+        throw error
+      }
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, intervalMs))
+  }
+
+  throw new Error('草稿归档仍在处理中，请稍后再试')
 }
 
 /**

@@ -26,6 +26,10 @@ spec:
           env:
             - name: VITE_API_BASE_URL
               value: "${API_BASE_URL}"
+            - name: VITE_CAPCUT_API_BASE_URL
+              value: "${CAPCUT_API_BASE_URL}"
+            - name: VITE_CAPCUT_API_KEY
+              value: "${CAPCUT_API_KEY}"
           readinessProbe:
             httpGet:
               path: /healthz

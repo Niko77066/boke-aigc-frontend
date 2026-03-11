@@ -66,6 +66,7 @@ jobs:
       namespace: ${{ steps.meta.outputs.namespace }}
       host: ${{ steps.meta.outputs.host }}
       api_base_url: ${{ steps.meta.outputs.api_base_url }}
+      capcut_api_base_url: ${{ steps.meta.outputs.capcut_api_base_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -77,6 +78,7 @@ jobs:
           RAW_NAMESPACE: ${{ vars.SEALOS_NAMESPACE }}
           RAW_HOST: ${{ vars.SEALOS_HOST }}
           RAW_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          RAW_CAPCUT_API_BASE_URL: ${{ vars.VITE_CAPCUT_API_BASE_URL }}
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
         run: |
@@ -85,6 +87,7 @@ jobs:
           namespace="${RAW_NAMESPACE:-default}"
           host="${RAW_HOST:-}"
           api_base_url="${RAW_API_BASE_URL:-}"
+          capcut_api_base_url="${RAW_CAPCUT_API_BASE_URL:-}"
           sha_tag="sha-${GITHUB_SHA::12}"
           image_ref="${REGISTRY}/${repo_lc}:${sha_tag}"
 
@@ -93,6 +96,7 @@ jobs:
             echo "namespace=${namespace}"
             echo "host=${host}"
             echo "api_base_url=${api_base_url}"
+            echo "capcut_api_base_url=${capcut_api_base_url}"
             echo "image_ref=${image_ref}"
             echo "tags<<EOF"
             echo "${image_ref}"
@@ -138,6 +142,8 @@ jobs:
       NAMESPACE: ${{ needs.build.outputs.namespace }}
       HOST: ${{ needs.build.outputs.host }}
       API_BASE_URL: ${{ needs.build.outputs.api_base_url }}
+      CAPCUT_API_BASE_URL: ${{ needs.build.outputs.capcut_api_base_url }}
+      CAPCUT_API_KEY: ${{ secrets.VITE_CAPCUT_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -186,5 +192,7 @@ jobs:
 
           kubectl set image deployment/"${APP_NAME}" "${APP_NAME}"="${IMAGE_REF}" -n "${NAMESPACE}"
           kubectl set env deployment/"${APP_NAME}" VITE_API_BASE_URL="${API_BASE_URL}" -n "${NAMESPACE}"
+          kubectl set env deployment/"${APP_NAME}" VITE_CAPCUT_API_BASE_URL="${CAPCUT_API_BASE_URL}" -n "${NAMESPACE}"
+          kubectl set env deployment/"${APP_NAME}" VITE_CAPCUT_API_KEY="${CAPCUT_API_KEY}" -n "${NAMESPACE}"
           kubectl annotate deployment/"${APP_NAME}" originImageName="${IMAGE_REF}" -n "${NAMESPACE}" --overwrite
           kubectl rollout status deployment/"${APP_NAME}" -n "${NAMESPACE}" --timeout=180s
