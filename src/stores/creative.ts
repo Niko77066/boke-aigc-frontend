@@ -338,11 +338,15 @@ export const useCreativeStore = defineStore('creative', () => {
       for (const tid of tids) {
         startVideoPolling(tid)
       }
-    } else {
-      // 没提取到 task_id，直接触发完成回调跳转
-      if (_onAllVideosDone) {
-        _onAllVideosDone()
-      }
+    }
+
+    // 视频流输出结束后就跳转到成片交付页。
+    // 如果识别到了 task_id，结果页会继续轮询并展示渲染状态；
+    // 如果没有识别到，也允许结果页做兜底恢复和手动补查。
+    if (_onAllVideosDone) {
+      const callback = _onAllVideosDone
+      _onAllVideosDone = null
+      callback()
     }
   }
 
