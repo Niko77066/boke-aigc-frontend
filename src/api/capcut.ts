@@ -194,13 +194,14 @@ export async function getVideoTaskStatus(taskId: string): Promise<VideoTaskStatu
     throw new Error('CapCut 状态查询返回缺少 task_id')
   }
 
-  const renderStatus = data.render_status?.toLowerCase() || ''
+  const renderStatus = data.render_status?.trim().toLowerCase() || ''
   const normalizedStatus = (() => {
-    if (['completed', 'success', 'succeeded'].includes(renderStatus)) return 'success'
     if (['failed', 'error', 'canceled', 'cancelled'].includes(renderStatus)) return 'failed'
+    if (['completed', 'complete', 'success', 'succeeded', 'done', 'finished'].includes(renderStatus)) return 'success'
+    if (data.oss_url) return 'success'
     if (['pending', 'queued'].includes(renderStatus)) return 'pending'
     if (renderStatus) return 'processing'
-    return data.oss_url ? 'success' : 'processing'
+    return 'processing'
   })()
 
   return {

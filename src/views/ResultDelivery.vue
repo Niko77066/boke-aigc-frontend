@@ -137,6 +137,21 @@ function getTaskStatusLabel(status: string): string {
   return '待查询'
 }
 
+function getTaskError(task: {
+  status: string
+  error?: string
+  message?: string | null
+  render_status?: string
+}): string | null {
+  if (task.status === 'failed') {
+    return task.error || task.message || null
+  }
+  if (task.render_status && task.status !== 'success') {
+    return `render_status: ${task.render_status}`
+  }
+  return null
+}
+
 function queryTaskIds(taskIds: string[]) {
   const uniqueTaskIds = [...new Set(taskIds.map((item) => item.trim()).filter(Boolean))]
   if (uniqueTaskIds.length === 0) {
@@ -289,6 +304,9 @@ watch(
               <div class="progress-track is-small mt-3">
                 <div class="progress-fill" :style="{ width: `${getTaskProgress(task)}%` }"></div>
               </div>
+              <div v-if="getTaskError(task)" class="render-task-error">
+                {{ getTaskError(task) }}
+              </div>
             </div>
           </div>
 
@@ -422,7 +440,7 @@ watch(
       </div>
 
       <div v-if="trackedTasks.length > 0" class="manual-query-tasks">
-        <div
+          <div
           v-for="task in trackedTasks"
           :key="task.task_id"
           class="manual-query-task"
@@ -430,6 +448,9 @@ watch(
           <div class="min-w-0">
             <div class="manual-query-task__id">{{ task.task_id }}</div>
             <div class="manual-query-task__meta">{{ getTaskStatusLabel(task.status) }}</div>
+            <div v-if="getTaskError(task)" class="manual-query-task__error">
+              {{ getTaskError(task) }}
+            </div>
           </div>
           <el-button text type="primary" @click="retryTaskLookup(task.task_id)">
             重新查询
@@ -538,6 +559,10 @@ watch(
   @apply text-lg font-semibold text-purple-600;
 }
 
+.render-task-error {
+  @apply mt-3 text-xs leading-5 text-red-500 break-all;
+}
+
 .render-progress-placeholder {
   @apply mt-6 text-sm text-gray-500 text-center;
 }
@@ -565,6 +590,10 @@ watch(
 
 .manual-query-task__meta {
   @apply text-xs text-gray-500 mt-1;
+}
+
+.manual-query-task__error {
+  @apply text-xs text-red-500 mt-1 break-all;
 }
 
 /* ── Video cards ──────────────────────────────── */
