@@ -1,8 +1,8 @@
 /**
  * KOX-CUT-API (剪映/CapCut) — 成片查询 & 草稿管理
  *
- * MCP endpoint: https://cutapi.koxagent.com/cutmcp/mcp
- * Status endpoint: https://cutapi.koxagent.com/video_task_status
+ * MCP endpoint: https://cutapi-stg.koxagent.com/cutmcp/mcp
+ * Status endpoint: https://cutapi-stg.koxagent.com/video_task_status
  * Auth: Bearer token (encrypted in workflow config)
  *
  * For the frontend:
@@ -12,8 +12,8 @@
 
 import { getCapcutApiBaseUrl, getCapcutApiKey } from '@/config/runtime'
 
-const CAPCUT_MCP_URL = 'https://cutapi.koxagent.com/cutmcp/mcp'
-const CAPCUT_STATUS_URL = 'https://cutapi.koxagent.com/video_task_status'
+const CAPCUT_MCP_URL = 'https://cutapi-stg.koxagent.com/cutmcp/mcp'
+const CAPCUT_STATUS_URL = 'https://cutapi-stg.koxagent.com/video_task_status'
 const CAPCUT_SECRET = 'cc94f2a95d7d2bdacd522ff619e4a898:8bf3bde7f8e481437b3e0d8bf54c1ddb753834706b9655645ffb648fda:ba02bf4abd1b72da80a0198dd9202e8f'
 const CAPCUT_DRAFTS_CREATE_PATH = '/api/capcut/drafts/create'
 const CAPCUT_ARCHIVES_SAVE_PATH = '/api/capcut/archives/save'
