@@ -609,9 +609,29 @@ const STRONG_TASK_CONTEXT_PATTERN = /(task|render|渲染|任务)/i
 const NON_TASK_CONTEXT_PATTERN = /(draft|草稿|chat[_\s-]?id|request[_\s-]?id|kb[_\s-]?id)/i
 const CONTEXTUAL_CODE_ID_PATTERN = /`([a-zA-Z0-9_-]{8,})`/g
 const CONTEXTUAL_UUID_PATTERN = /\b([a-f0-9]{8}-[a-f0-9-]{8,})\b/gi
+const TASK_LABEL_PATTERN = /(task[_\s-]*id|taskid|任务\s*id|任务编号|渲染任务|render\s*id)/i
+const GENERIC_ID_CANDIDATE_PATTERN = /\b([a-zA-Z0-9][a-zA-Z0-9_-]{7,})\b/g
 const TASK_TAIL_LINE_LIMIT = 60
 const TASK_TAIL_CHAR_LIMIT = 4000
 const TASK_SECTION_MARKER_PATTERN = /(渲染状态|render status|task[_\s-]*id|任务\s*id|任务编号|\*\*v\d+\*\*|视频\s*\d+)/i
+const TASK_CONTEXT_WINDOW_BEFORE = 1
+const TASK_CONTEXT_WINDOW_AFTER = 2
+const TASK_ID_STOPWORDS = new Set([
+  'task_id',
+  'taskid',
+  'draft_id',
+  'draftid',
+  'chat_id',
+  'request_id',
+  'render_status',
+  'processing',
+  'completed',
+  'pending',
+  'success',
+  'failed',
+  'version_a',
+  'version_b',
+])
 
 function pushTaskIdCandidate(seen: Set<string>, candidate: string | undefined, context?: string) {
   if (!candidate || candidate.length < 8) return
@@ -627,17 +647,83 @@ function pushTaskIdCandidate(seen: Set<string>, candidate: string | undefined, c
   seen.add(normalized)
 }
 
-function collectTaskIdsFromContext(text: string, seen: Set<string>) {
-  for (const rawLine of text.split('\n')) {
-    const line = rawLine.trim()
-    if (!line || !TASK_CONTEXT_PATTERN.test(line)) continue
+function isLikelyTaskIdCandidate(candidate: string): boolean {
+  const normalized = candidate.trim()
+  if (!normalized || normalized.length < 8) return false
+  if (/^https?:\/\//i.test(normalized)) return false
 
-    for (const match of line.matchAll(CONTEXTUAL_CODE_ID_PATTERN)) {
-      pushTaskIdCandidate(seen, match[1], line)
+  const lower = normalized.toLowerCase()
+  if (TASK_ID_STOPWORDS.has(lower)) return false
+  if (NON_TASK_CONTEXT_PATTERN.test(lower) && !STRONG_TASK_CONTEXT_PATTERN.test(lower)) return false
+  if (!/[0-9]/.test(normalized) && !/[_-]/.test(normalized)) return false
+
+  return true
+}
+
+function extractLineIdCandidates(line: string): string[] {
+  const lowerLine = line.toLowerCase()
+  if (NON_TASK_CONTEXT_PATTERN.test(lowerLine) && !STRONG_TASK_CONTEXT_PATTERN.test(lowerLine)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+
+  for (const match of line.matchAll(CONTEXTUAL_CODE_ID_PATTERN)) {
+    if (isLikelyTaskIdCandidate(match[1] || '')) {
+      seen.add(match[1]!)
+    }
+  }
+
+  for (const match of line.matchAll(CONTEXTUAL_UUID_PATTERN)) {
+    if (isLikelyTaskIdCandidate(match[1] || '')) {
+      seen.add(match[1]!)
+    }
+  }
+
+  for (const match of line.matchAll(GENERIC_ID_CANDIDATE_PATTERN)) {
+    if (isLikelyTaskIdCandidate(match[1] || '')) {
+      seen.add(match[1]!)
+    }
+  }
+
+  return [...seen]
+}
+
+function collectTaskIdsFromContext(text: string, seen: Set<string>) {
+  const lines = text.split('\n')
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = (lines[index] || '').trim()
+    if (!line) continue
+
+    const windowStart = Math.max(0, index - TASK_CONTEXT_WINDOW_BEFORE)
+    const windowEnd = Math.min(lines.length, index + TASK_CONTEXT_WINDOW_AFTER + 1)
+    const contextLines = lines
+      .slice(windowStart, windowEnd)
+      .map((item) => item.trim())
+      .filter(Boolean)
+    const contextWindow = contextLines.join(' ')
+
+    if (!TASK_CONTEXT_PATTERN.test(contextWindow)) continue
+    if (NON_TASK_CONTEXT_PATTERN.test(contextWindow) && !STRONG_TASK_CONTEXT_PATTERN.test(contextWindow)) {
+      continue
     }
 
-    for (const match of line.matchAll(CONTEXTUAL_UUID_PATTERN)) {
-      pushTaskIdCandidate(seen, match[1], line)
+    for (const contextLine of contextLines) {
+      for (const candidate of extractLineIdCandidates(contextLine)) {
+        pushTaskIdCandidate(seen, candidate, contextWindow)
+      }
+    }
+
+    if (!TASK_LABEL_PATTERN.test(contextWindow)) continue
+
+    for (let offset = 1; offset <= TASK_CONTEXT_WINDOW_AFTER + 1; offset++) {
+      const nearbyLine = (lines[index + offset] || '').trim()
+      if (!nearbyLine) continue
+
+      for (const candidate of extractLineIdCandidates(nearbyLine)) {
+        pushTaskIdCandidate(seen, candidate, contextWindow)
+      }
     }
   }
 }
@@ -646,7 +732,7 @@ function getTaskExtractionTail(text: string): string {
   const lines = text.split('\n')
   let startIndex = Math.max(0, lines.length - TASK_TAIL_LINE_LIMIT)
 
-  for (let i = lines.length - 1; i >= 0; i--) {
+  for (let i = startIndex; i < lines.length; i++) {
     if (TASK_SECTION_MARKER_PATTERN.test(lines[i] || '')) {
       startIndex = Math.max(0, i - 2)
       break
@@ -673,6 +759,7 @@ export function extractAllTaskIds(text: string): string[] {
     /task_id["\s]*[:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
     /task[\s_-]*id["\s]*[：:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
     /taskId["\s]*[:=]\s*["'`]?([a-zA-Z0-9_-]+)["'`]?/gi,
+    /(?:^|\n)[^\n]*task[\s_-]*id[^\n]*\n\s*(?:>\s*)?[("'`“”‘’]*([a-zA-Z0-9_-]{8,})[)"'`“”‘’]*/gi,
     /-\s*\*\*[^*]+\*\*.*?task_id\s*[:：]\s*`?([a-zA-Z0-9_-]+)`?/gi,
     /-\s*\*\*[^*]+\*\*\s*`([a-zA-Z0-9_-]{8,})`\s*(?:->|→|➡|渲染|render)/gi,
     /\*\*[^*]+\*\*\s*`([a-zA-Z0-9_-]{8,})`\s*(?:->|→|➡|渲染|render)/gi,
