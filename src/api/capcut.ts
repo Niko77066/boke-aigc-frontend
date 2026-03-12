@@ -195,6 +195,33 @@ function pickNumber(record: Record<string, unknown>, keys: string[]): number | u
   return undefined
 }
 
+function extractCapcutMessage(payload: unknown, fallback?: string): string | null {
+  if (!isRecord(payload)) {
+    return fallback ?? null
+  }
+
+  const directMessage = pickString(payload, ['error_description', 'detail', 'error', 'message'])
+  if (directMessage) {
+    return directMessage
+  }
+
+  if (isRecord(payload.output)) {
+    const outputMessage = pickString(payload.output, ['detail', 'error', 'message'])
+    if (outputMessage) {
+      return outputMessage
+    }
+  }
+
+  if (isRecord(payload.data)) {
+    const dataMessage = pickString(payload.data, ['detail', 'error', 'message'])
+    if (dataMessage) {
+      return dataMessage
+    }
+  }
+
+  return fallback ?? null
+}
+
 function getDownloadFilename(contentDisposition: string | null, fallback: string): string {
   if (!contentDisposition) return fallback
 
@@ -222,11 +249,11 @@ function getEnvelopeError(payload: unknown): string | null {
   if (!isRecord(payload)) return null
 
   if (payload.success === false) {
-    return pickString(payload, ['error', 'message', 'detail']) || '剪映接口返回失败'
+    return extractCapcutMessage(payload, '剪映接口返回失败')
   }
 
   if (isRecord(payload.output) && payload.output.success === false) {
-    return pickString(payload.output, ['error', 'message', 'detail']) || '剪映接口返回失败'
+    return extractCapcutMessage(payload.output, '剪映接口返回失败')
   }
 
   return null
@@ -260,18 +287,8 @@ function parseErrorMessage(rawText: string, fallback: string): string {
   let message = fallback
 
   try {
-    const parsed = JSON.parse(rawText) as {
-      error?: string
-      message?: string
-      error_description?: string
-    }
-    if (parsed.error_description) {
-      message = parsed.error_description
-    } else if (parsed.message) {
-      message = parsed.message
-    } else if (parsed.error) {
-      message = parsed.error
-    }
+    const parsed = JSON.parse(rawText) as unknown
+    message = extractCapcutMessage(parsed, fallback) || fallback
   } catch {
     if (rawText.trim()) message = rawText.trim()
   }
@@ -504,11 +521,12 @@ export async function getDraftArchiveDownload(draftId: string): Promise<DraftArc
   const filename = getDownloadFilename(res.headers.get('content-disposition'), `${draftId}.zip`)
 
   if (contentType.includes('application/json')) {
-    const payload = mergePayload(await res.json().catch(() => null))
+    const rawPayload = await res.json().catch(() => null)
+    const payload = mergePayload(rawPayload)
     const downloadUrl = pickString(payload, ['download_url', 'download_link', 'archive_url', 'url', 'signed_url'])
 
     if (!downloadUrl) {
-      throw new Error(pickString(payload, ['message', 'detail', 'error']) || '下载接口未返回可用链接')
+      throw new Error(extractCapcutMessage(rawPayload, '下载接口未返回可用链接') || '下载接口未返回可用链接')
     }
 
     return {
