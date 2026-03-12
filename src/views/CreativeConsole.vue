@@ -75,24 +75,284 @@ const currentStep = computed(() => {
   return 0
 })
 
-// ── Parsed plans from pipeline output ────────────────────────────
-const parsedPlans = computed(() => {
-  if (creativeStore.pipelineRunning || !creativeStore.pipelineOutput) return []
-  if (creativeStore.pipelineMode !== '文案') return []
-  const text = creativeStore.pipelineOutput
-  const planRegex = /(?:方案[一二三四五六七八九十\d]|[①②③④⑤]|(?:^|\n)\s*\d+[.、）)])/gm
-  const matches = [...text.matchAll(planRegex)]
-  if (matches.length < 2) return []
+const PLAN_REGEX = /(?:方案[一二三四五六七八九十\d]|[①②③④⑤]|(?:^|\n)\s*\d+[.、）)])/gm
+
+function splitPlans(text: string): string[] {
+  const matches = [...text.matchAll(PLAN_REGEX)]
+  if (matches.length === 0) return []
+
   const plans: string[] = []
   for (let i = 0; i < matches.length; i++) {
     const start = matches[i]!.index!
     const end = i + 1 < matches.length ? matches[i + 1]!.index! : text.length
     plans.push(text.slice(start, end).trim())
   }
-  return plans
+  return plans.filter(Boolean)
+}
+
+function clampPercent(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.round(value)))
+}
+
+// ── Parsed plans from pipeline output ────────────────────────────
+const parsedPlans = computed(() => {
+  if (creativeStore.pipelineRunning || !creativeStore.pipelineOutput) return []
+  if (creativeStore.pipelineMode !== '文案') return []
+  const plans = splitPlans(creativeStore.pipelineOutput)
+  return plans.length >= 2 ? plans : []
 })
 
 const hasParsedPlans = computed(() => parsedPlans.value.length >= 2)
+const detectedPlanCount = computed(() => {
+  if (creativeStore.pipelineMode !== '文案') return 0
+  return Math.min(4, splitPlans(creativeStore.pipelineOutput).length)
+})
+
+const trackedVideoTasks = computed(() => {
+  return creativeStore.videoTaskIds.map((taskId) => {
+    const status = creativeStore.videoRenderStatuses.get(taskId)
+    return status ?? {
+      task_id: taskId,
+      status: creativeStore.videoPollingCount > 0 ? 'processing' : 'pending',
+    }
+  })
+})
+
+function getTaskProgress(task: { status: string; progress?: number }): number {
+  if (task.status === 'success' || task.status === 'failed') return 100
+  if (typeof task.progress === 'number') {
+    return Math.max(0, Math.min(99, Math.round(task.progress)))
+  }
+  if (task.status === 'processing') return 45
+  return 10
+}
+
+function getRenderActionLabel(task: {
+  status: string
+  progress?: number
+  render_status?: string
+  message?: string | null
+}): string {
+  if (task.status === 'success') return '成片渲染完成，正在整理视频结果'
+  if (task.status === 'failed') return task.message || '渲染任务失败，请稍后重试'
+
+  const renderStatus = task.render_status?.trim().toLowerCase() || ''
+  if (renderStatus.includes('queue') || renderStatus.includes('pending')) {
+    return '正在排队等待云端渲染资源'
+  }
+  if (renderStatus.includes('encoding') || renderStatus.includes('transcode')) {
+    return '正在编码导出成片文件'
+  }
+  if (renderStatus.includes('render') || renderStatus.includes('process')) {
+    return '正在云端渲染视频画面'
+  }
+  if (typeof task.progress === 'number' && task.progress > 0) {
+    return '正在推进视频渲染'
+  }
+  return '正在同步渲染状态'
+}
+
+function detectVideoPipelinePhase(text: string): {
+  progress: number
+  title: string
+  description: string
+} {
+  const normalized = text.toLowerCase()
+
+  if (/task_id|render_status|oss_url|video_url|开始渲染|提交渲染|渲染任务/.test(normalized)) {
+    return {
+      progress: 88,
+      title: '已提交视频渲染任务',
+      description: '视频脚本与草稿准备完成，系统正在提交并追踪成片渲染任务。',
+    }
+  }
+
+  if (/step\s*3|剪映|草稿|轨道|字幕|合成|draft_id/.test(normalized)) {
+    return {
+      progress: 72,
+      title: '正在组装剪映草稿与时间轴',
+      description: '系统正在把音频、字幕和素材写入轨道，准备进入渲染阶段。',
+    }
+  }
+
+  if (/step\s*2|素材|media_id|视觉素材|搜索视频|检索素材/.test(normalized)) {
+    return {
+      progress: 48,
+      title: '正在搜索并筛选视觉素材',
+      description: '系统正在根据文案语义匹配可用画面，并筛出适合的素材片段。',
+    }
+  }
+
+  if (/step\s*1|tts|配音|音频|旁白/.test(normalized)) {
+    return {
+      progress: 24,
+      title: '正在生成 TTS 配音',
+      description: '系统正在处理播报文案、音色和时间轴，为后续素材匹配做准备。',
+    }
+  }
+
+  return {
+    progress: 12,
+    title: '正在解析方案并启动视频流程',
+    description: '系统正在读取所选文案，准备进入配音、素材匹配和成片制作。',
+  }
+}
+
+type ProgressTone = 'copy' | 'video' | 'success' | 'error'
+
+interface CreativeProgressMeta {
+  visible: boolean
+  percent: number
+  badge: string
+  title: string
+  description: string
+  tone: ProgressTone
+}
+
+const creativeProgress = computed<CreativeProgressMeta>(() => {
+  if (creativeStore.pipelineError) {
+    return {
+      visible: true,
+      percent: 0,
+      badge: '执行失败',
+      title: '流程执行失败',
+      description: creativeStore.pipelineError,
+      tone: 'error',
+    }
+  }
+
+  const hasAnyProgress = Boolean(
+    creativeStore.pipelineRunning
+    || creativeStore.pipelineOutput
+    || creativeStore.pipelineVideoStarted
+    || creativeStore.videoPollingCount > 0
+    || creativeStore.videoTaskIds.length > 0,
+  )
+
+  if (!hasAnyProgress) {
+    return {
+      visible: false,
+      percent: 0,
+      badge: '',
+      title: '',
+      description: '',
+      tone: 'copy',
+    }
+  }
+
+  if (creativeStore.pipelineMode === '文案' && !creativeStore.pipelineVideoStarted) {
+    if (!creativeStore.pipelineRunning && hasParsedPlans.value) {
+      return {
+        visible: true,
+        percent: 100,
+        badge: '文案完成',
+        title: '4 套营销方案已生成',
+        description: '可以直接点击下方方案卡片，继续进入视频制作流程。',
+        tone: 'success',
+      }
+    }
+
+    if (!creativeStore.pipelineRunning && creativeStore.pipelineOutput) {
+      return {
+        visible: true,
+        percent: 100,
+        badge: '文案完成',
+        title: '文案生成完成',
+        description: 'AI 输出已经返回，可以从结果中挑选合适方案继续制作视频。',
+        tone: 'success',
+      }
+    }
+
+    const outputLength = creativeStore.pipelineOutput.trim().length
+    const baseProgress = outputLength === 0 ? 8 : 18 + Math.min(18, Math.floor(outputLength / 140))
+    const progress = detectedPlanCount.value > 0
+      ? 20 + detectedPlanCount.value * 18 + Math.min(8, Math.floor(outputLength / 260))
+      : baseProgress
+
+    if (detectedPlanCount.value >= 4) {
+      return {
+        visible: true,
+        percent: clampPercent(progress, 80, 94),
+        badge: '文案生成',
+        title: '正在整理最终输出',
+        description: '4 套方案主体已经生成，系统正在补齐细节并整理成最终展示格式。',
+        tone: 'copy',
+      }
+    }
+
+    if (detectedPlanCount.value > 0) {
+      return {
+        visible: true,
+        percent: clampPercent(progress, 32, 88),
+        badge: '文案生成',
+        title: `正在生成第 ${detectedPlanCount.value + 1} 套方案`,
+        description: `当前已产出 ${detectedPlanCount.value}/4 套方案，系统正在补齐剩余创意方向。`,
+        tone: 'copy',
+      }
+    }
+
+    return {
+      visible: true,
+      percent: clampPercent(progress, 8, 28),
+      badge: '文案生成',
+      title: '正在分析需求与组织文案结构',
+      description: 'AI 正在综合目标人群、核心卖点和参考文案，规划本轮输出的创意方向。',
+      tone: 'copy',
+    }
+  }
+
+  if (creativeStore.videoTaskIds.length > 0 || creativeStore.videoPollingCount > 0) {
+    const tasks = trackedVideoTasks.value
+    const total = tasks.length || 1
+    const completed = tasks.filter((task) => task.status === 'success').length
+    const totalProgress = tasks.reduce((sum, task) => sum + getTaskProgress(task), 0)
+    const averageProgress = total === 0 ? 0 : Math.round(totalProgress / total)
+    const activeTask = tasks.find((task) => task.status === 'processing' || task.status === 'pending') ?? tasks[0]
+
+    if (creativeStore.videoAllDone) {
+      return {
+        visible: true,
+        percent: 100,
+        badge: '视频完成',
+        title: '视频制作完成',
+        description: `已完成 ${completed}/${total} 个渲染任务，正在跳转到成片交付页。`,
+        tone: 'success',
+      }
+    }
+
+    const progress = clampPercent(Math.max(18, averageProgress), 18, 95)
+    const action = activeTask ? getRenderActionLabel(activeTask) : '正在同步视频渲染状态'
+    const detail = activeTask && typeof activeTask.progress === 'number'
+      ? `当前任务进度 ${Math.round(activeTask.progress)}%`
+      : '正在持续拉取云端状态'
+
+    return {
+      visible: true,
+      percent: progress,
+      badge: '视频渲染',
+      title: '正在生成成片',
+      description: `${action}，${detail}。已完成 ${completed}/${total} 个任务。`,
+      tone: 'video',
+    }
+  }
+
+  const phase = detectVideoPipelinePhase(creativeStore.pipelineOutput)
+  return {
+    visible: true,
+    percent: phase.progress,
+    badge: '视频制作',
+    title: phase.title,
+    description: phase.description,
+    tone: 'video',
+  }
+})
+
+const creativeProgressColor = computed(() => {
+  if (creativeProgress.value.tone === 'success') return '#10B981'
+  if (creativeProgress.value.tone === 'error') return '#EF4444'
+  if (creativeProgress.value.tone === 'video') return '#2563EB'
+  return '#7C3AED'
+})
 
 // ── Status ───────────────────────────────────────────────────────
 const statusCardClass = computed(() => {
@@ -269,6 +529,23 @@ function scrollOutput() {
               <span class="text-sm">{{ creativeStore.pipelineError }}</span>
             </div>
 
+            <div v-if="creativeProgress.visible" class="progress-card" :class="`is-${creativeProgress.tone}`">
+              <div class="progress-card__top">
+                <div class="min-w-0">
+                  <div class="progress-kicker">{{ creativeProgress.badge }}</div>
+                  <div class="progress-title">{{ creativeProgress.title }}</div>
+                </div>
+                <div class="progress-percent">{{ creativeProgress.percent }}%</div>
+              </div>
+              <el-progress
+                :percentage="creativeProgress.percent"
+                :show-text="false"
+                :stroke-width="8"
+                :color="creativeProgressColor"
+              />
+              <p class="progress-desc">{{ creativeProgress.description }}</p>
+            </div>
+
             <div v-if="creativeStore.pipelineOutput" class="output-text whitespace-pre-wrap text-sm text-gray-800 leading-relaxed">
               {{ creativeStore.pipelineOutput }}
               <span v-if="creativeStore.pipelineRunning" class="typing-cursor">▌</span>
@@ -411,6 +688,66 @@ function scrollOutput() {
 
 .error-banner {
   @apply p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 mb-4;
+}
+
+.progress-card {
+  @apply rounded-2xl border p-4 mb-4;
+  background: linear-gradient(180deg, #FCFCFF 0%, #FFFFFF 100%);
+}
+
+.progress-card.is-copy {
+  border-color: rgba(124, 58, 237, 0.18);
+  box-shadow: 0 12px 24px rgba(124, 58, 237, 0.08);
+}
+
+.progress-card.is-video {
+  border-color: rgba(37, 99, 235, 0.18);
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.08);
+}
+
+.progress-card.is-success {
+  border-color: rgba(16, 185, 129, 0.18);
+  box-shadow: 0 12px 24px rgba(16, 185, 129, 0.08);
+}
+
+.progress-card.is-error {
+  border-color: rgba(239, 68, 68, 0.18);
+  box-shadow: 0 12px 24px rgba(239, 68, 68, 0.08);
+}
+
+.progress-card__top {
+  @apply flex items-start justify-between gap-4 mb-3;
+}
+
+.progress-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.progress-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.progress-percent {
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.progress-desc {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 
 .plan-card {
