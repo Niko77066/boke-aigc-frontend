@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCreativeStore } from '@/stores/creative'
 import { useWorkflowStore } from '@/stores/workflow'
@@ -89,107 +89,187 @@ const showManualLookup = computed(() => {
     || trackedTasks.value.length > 0
     || !hasVideos.value
 })
-const currentDraftId = computed(() => creativeStore.videoDraftId?.trim() || '')
 const manualTaskIds = ref('')
 const manualLookupBusy = ref(false)
 const draftName = ref('')
 const draftWidth = ref(1080)
 const draftHeight = ref(1920)
-const draftFolder = ref('')
 const createDraftBusy = ref(false)
-const archiveDraftBusy = ref(false)
-const downloadDraftBusy = ref(false)
-const archiveFeedback = ref('')
-const archiveLocation = ref('')
-const archivePending = ref(false)
-const archiveReady = ref(false)
-const archiveError = ref('')
-const archiveDraftVersion = ref<number | null>(null)
-const readyArchiveDownload = ref<DraftArchiveDownloadResponse | null>(null)
 
-let archivePollToken = 0
+type DraftStatusTone = 'idle' | 'ready' | 'working' | 'success' | 'error'
+
+interface DraftArchiveState {
+  folder: string
+  archiveDraftBusy: boolean
+  downloadDraftBusy: boolean
+  archiveFeedback: string
+  archiveLocation: string
+  archivePending: boolean
+  archiveReady: boolean
+  archiveError: string
+  archiveDraftVersion: number | null
+  readyArchiveDownload: DraftArchiveDownloadResponse | null
+}
+
+const draftArchiveStates = reactive<Record<string, DraftArchiveState>>({})
+const archivePollTokens: Record<string, number> = {}
+
+function createDraftArchiveState(): DraftArchiveState {
+  return {
+    folder: '',
+    archiveDraftBusy: false,
+    downloadDraftBusy: false,
+    archiveFeedback: '',
+    archiveLocation: '',
+    archivePending: false,
+    archiveReady: false,
+    archiveError: '',
+    archiveDraftVersion: null,
+    readyArchiveDownload: null,
+  }
+}
+
+function ensureDraftArchiveState(draftId: string): DraftArchiveState {
+  if (!draftArchiveStates[draftId]) {
+    draftArchiveStates[draftId] = createDraftArchiveState()
+  }
+  return draftArchiveStates[draftId]
+}
+
+const linkedDraftIds = computed(() => {
+  const seen = new Set<string>()
+  const draftIds: string[] = []
+
+  for (const status of videoStatuses.value) {
+    const draftId = status.draft_id?.trim()
+    if (draftId && !seen.has(draftId)) {
+      seen.add(draftId)
+      draftIds.push(draftId)
+    }
+  }
+
+  for (const draftId of creativeStore.videoDraftIds) {
+    const normalizedDraftId = draftId.trim()
+    if (normalizedDraftId && !seen.has(normalizedDraftId)) {
+      seen.add(normalizedDraftId)
+      draftIds.push(normalizedDraftId)
+    }
+  }
+
+  return draftIds.slice(0, EXPECTED_VIDEO_COUNT)
+})
+
+const hasLinkedDrafts = computed(() => linkedDraftIds.value.length > 0)
 
 function buildDefaultDraftName(): string {
   const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')
   return `boke-draft-${stamp}`
 }
 
-const draftResolutionLabel = computed(() => `${draftWidth.value} x ${draftHeight.value}`)
-const canDownloadArchive = computed(() => {
-  return Boolean(currentDraftId.value) && !archivePending.value && !archiveDraftBusy.value
-})
-const draftStatusMeta = computed(() => {
-  if (!currentDraftId.value) {
-    return {
-      tone: 'idle',
-      label: '未创建草稿',
-      title: '先创建一个剪映草稿',
-      description: '当前结果页还没有关联到 draft_id。创建后才能继续归档和下载。',
-    }
+const draftPanelDescription = computed(() => {
+  if (!hasLinkedDrafts.value) {
+    return '当前没有关联到 draft_id，可以先创建一个空白剪映草稿。'
   }
+  if (linkedDraftIds.value.length === 1) {
+    return '当前识别到 1 个剪映草稿。先发起归档，归档包生成后再下载。'
+  }
+  return `当前识别到 ${linkedDraftIds.value.length} 个剪映草稿。每个草稿都需要单独归档，归档包生成后再下载。`
+})
 
-  if (archiveDraftBusy.value) {
+function resetDraftArchiveState(draftId: string) {
+  const state = ensureDraftArchiveState(draftId)
+  state.archivePending = false
+  state.archiveReady = false
+  state.archiveError = ''
+  state.archiveFeedback = ''
+  state.archiveLocation = ''
+  state.archiveDraftVersion = null
+  state.readyArchiveDownload = null
+}
+
+function canCheckArchive(draftId: string): boolean {
+  const state = ensureDraftArchiveState(draftId)
+  return Boolean(draftId) && !state.archivePending && !state.archiveDraftBusy
+}
+
+function getDraftStatusMeta(draftId: string): {
+  tone: DraftStatusTone
+  label: string
+  title: string
+  description: string
+  guide: string
+} {
+  const state = ensureDraftArchiveState(draftId)
+
+  if (state.archiveDraftBusy) {
     return {
       tone: 'working',
       label: '提交归档中',
       title: '正在提交草稿归档任务',
       description: '系统正在把当前 draft_id 发送到剪映归档接口。',
+      guide: '提交后通常需要等待一段时间，归档包生成完成后才能下载。',
     }
   }
 
-  if (archivePending.value) {
+  if (state.archivePending) {
     return {
       tone: 'working',
       label: '归档生成中',
       title: '归档包正在后台生成',
       description: '归档接口已接收请求，系统会持续检查下载链接，准备好后会自动切换为可下载状态。',
+      guide: '这一步通常需要几十秒。请等待状态变为“归档已就绪”后再点下载。',
     }
   }
 
-  if (archiveReady.value) {
+  if (state.archiveReady) {
     return {
       tone: 'success',
       label: '归档已就绪',
       title: '草稿归档包已经可下载',
-      description: '可以直接点击下载归档，拿到剪映草稿包。',
+      description: '可以直接点击下载归档，拿到对应的剪映草稿包。',
+      guide: '如果刷新页面后状态丢失，可以先点“检查归档状态”重新确认。',
     }
   }
 
-  if (archiveError.value) {
+  if (state.archiveError) {
     return {
       tone: 'error',
       label: '归档检查失败',
       title: '归档状态暂时不可确认',
-      description: archiveError.value,
+      description: state.archiveError,
+      guide: '如果刚刚提交过归档，通常只是归档包还没生成完，可以稍后再检查。',
     }
   }
 
   return {
     tone: 'ready',
     label: '草稿已关联',
-    title: '当前成片已绑定剪映草稿',
-    description: '可以填写归档目录并发起归档。归档完成后会显示明确的下载状态。',
+    title: '当前视频已绑定剪映草稿',
+    description: '先填写归档目录并发起归档。归档包准备完成后，按钮会切换为可下载状态。',
+    guide: '先点“归档草稿”，提交后等待状态切换为“归档已就绪”，再下载。',
   }
-})
-
-function setArchiveIdleState() {
-  archivePending.value = false
-  archiveReady.value = false
-  archiveError.value = ''
-  archiveFeedback.value = ''
-  archiveLocation.value = ''
-  archiveDraftVersion.value = null
-  readyArchiveDownload.value = null
 }
 
-async function waitForArchiveReady(draftId: string, draftVersion?: number | null) {
-  const token = ++archivePollToken
+const draftCards = computed(() => {
+  return linkedDraftIds.value.map((draftId, index) => ({
+    draftId,
+    index,
+    state: ensureDraftArchiveState(draftId),
+    statusMeta: getDraftStatusMeta(draftId),
+    canCheckArchive: canCheckArchive(draftId),
+  }))
+})
 
-  archivePending.value = true
-  archiveReady.value = false
-  archiveError.value = ''
-  readyArchiveDownload.value = null
-  archiveFeedback.value = '归档任务已提交，正在等待归档包生成...'
+async function waitForArchiveReady(draftId: string, draftVersion?: number | null) {
+  const state = ensureDraftArchiveState(draftId)
+  const token = (archivePollTokens[draftId] ?? 0) + 1
+  archivePollTokens[draftId] = token
+
+  state.archivePending = true
+  state.archiveReady = false
+  state.archiveError = ''
+  state.readyArchiveDownload = null
+  state.archiveFeedback = '归档任务已提交，正在等待归档包生成...'
 
   try {
     const result = await pollDraftArchiveDownload(draftId, {
@@ -198,24 +278,24 @@ async function waitForArchiveReady(draftId: string, draftVersion?: number | null
       timeoutMs: 180000,
     })
 
-    if (token !== archivePollToken) return
+    if (token !== archivePollTokens[draftId]) return
 
-    archivePending.value = false
-    archiveReady.value = true
-    archiveError.value = ''
-    archiveDraftVersion.value = result.draft_version ?? draftVersion ?? null
-    readyArchiveDownload.value = result
-    archiveFeedback.value = '归档包已生成，可以直接下载。'
+    state.archivePending = false
+    state.archiveReady = true
+    state.archiveError = ''
+    state.archiveDraftVersion = result.draft_version ?? draftVersion ?? null
+    state.readyArchiveDownload = result
+    state.archiveFeedback = '归档包已生成，可以直接下载。'
     if (result.url) {
-      archiveLocation.value = result.url
+      state.archiveLocation = result.url
     }
   } catch (error) {
-    if (token !== archivePollToken) return
+    if (token !== archivePollTokens[draftId]) return
 
-    archivePending.value = false
-    archiveReady.value = false
-    archiveError.value = error instanceof Error ? error.message : '归档状态查询失败'
-    archiveFeedback.value = '归档任务已提交，但下载链接暂未就绪。'
+    state.archivePending = false
+    state.archiveReady = false
+    state.archiveError = error instanceof Error ? error.message : '归档状态查询失败'
+    state.archiveFeedback = '归档任务已提交，但归档包暂未就绪，请稍后再检查。'
   }
 }
 
@@ -335,7 +415,6 @@ async function handleCreateDraft() {
   }
 
   createDraftBusy.value = true
-  setArchiveIdleState()
 
   try {
     const draft = await createDraft({
@@ -343,7 +422,8 @@ async function handleCreateDraft() {
       width: draftWidth.value,
       height: draftHeight.value,
     })
-    creativeStore.setVideoDraftId(draft.draft_id)
+    creativeStore.addVideoDraftId(draft.draft_id)
+    resetDraftArchiveState(draft.draft_id)
     ElMessage.success(`草稿创建成功：${draft.draft_id}`)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '创建草稿失败')
@@ -352,9 +432,9 @@ async function handleCreateDraft() {
   }
 }
 
-async function handleArchiveDraft() {
-  const draftId = currentDraftId.value
-  const folder = draftFolder.value.trim()
+async function handleArchiveDraft(draftId: string) {
+  const state = ensureDraftArchiveState(draftId)
+  const folder = state.folder.trim()
 
   if (!draftId) {
     ElMessage.warning('当前没有可归档的 draft_id')
@@ -365,54 +445,54 @@ async function handleArchiveDraft() {
     return
   }
 
-  archiveDraftBusy.value = true
-  archiveReady.value = false
-  archiveError.value = ''
-  archiveFeedback.value = ''
-  archiveLocation.value = ''
-  readyArchiveDownload.value = null
+  state.archiveDraftBusy = true
+  state.archiveReady = false
+  state.archiveError = ''
+  state.archiveFeedback = ''
+  state.archiveLocation = ''
+  state.readyArchiveDownload = null
 
   try {
     const result = await saveDraftArchive({
       draft_id: draftId,
       draft_folder: folder,
     })
-    archiveDraftVersion.value = result.draft_version ?? archiveDraftVersion.value
-    archiveFeedback.value = result.message || '已发起草稿归档，归档包生成后可下载'
-    archiveLocation.value = result.archive_path || result.archive_url || ''
-    ElMessage.success(archiveFeedback.value)
-    void waitForArchiveReady(draftId, archiveDraftVersion.value)
+    state.archiveDraftVersion = result.draft_version ?? state.archiveDraftVersion
+    state.archiveFeedback = result.message || '已发起草稿归档，请等待归档包生成后再下载。'
+    state.archiveLocation = result.archive_path || result.archive_url || ''
+    ElMessage.success(`已提交归档：${draftId}，请等待归档包生成后再下载。`)
+    void waitForArchiveReady(draftId, state.archiveDraftVersion)
   } catch (error) {
-    archivePending.value = false
-    archiveReady.value = false
-    archiveError.value = error instanceof Error ? error.message : '草稿归档失败'
+    state.archivePending = false
+    state.archiveReady = false
+    state.archiveError = error instanceof Error ? error.message : '草稿归档失败'
     ElMessage.error(error instanceof Error ? error.message : '草稿归档失败')
   } finally {
-    archiveDraftBusy.value = false
+    state.archiveDraftBusy = false
   }
 }
 
-async function handleDownloadDraft() {
-  const draftId = currentDraftId.value
+async function handleDownloadDraft(draftId: string) {
+  const state = ensureDraftArchiveState(draftId)
   if (!draftId) {
     ElMessage.warning('当前没有可下载的 draft_id')
     return
   }
 
-  downloadDraftBusy.value = true
+  state.downloadDraftBusy = true
 
   try {
-    const result = readyArchiveDownload.value
-      ?? await getDraftArchiveDownload(draftId, archiveDraftVersion.value ?? undefined)
+    const result = state.readyArchiveDownload
+      ?? await getDraftArchiveDownload(draftId, state.archiveDraftVersion ?? undefined)
 
     if (result.url) {
       window.open(result.url, '_blank', 'noopener,noreferrer')
-      archivePending.value = false
-      archiveReady.value = true
-      archiveDraftVersion.value = result.draft_version ?? archiveDraftVersion.value
-      readyArchiveDownload.value = result
-      archiveLocation.value = result.url
-      ElMessage.success('已打开归档下载链接')
+      state.archivePending = false
+      state.archiveReady = true
+      state.archiveDraftVersion = result.draft_version ?? state.archiveDraftVersion
+      state.readyArchiveDownload = result
+      state.archiveLocation = result.url
+      ElMessage.success(`已打开归档下载链接：${draftId}`)
       return
     }
 
@@ -425,19 +505,20 @@ async function handleDownloadDraft() {
       link.click()
       link.remove()
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
-      archivePending.value = false
-      archiveReady.value = true
-      archiveDraftVersion.value = result.draft_version ?? archiveDraftVersion.value
-      readyArchiveDownload.value = result
-      ElMessage.success('归档下载已开始')
+      state.archivePending = false
+      state.archiveReady = true
+      state.archiveDraftVersion = result.draft_version ?? state.archiveDraftVersion
+      state.readyArchiveDownload = result
+      ElMessage.success(`归档下载已开始：${draftId}`)
       return
     }
 
     throw new Error('下载接口未返回可用内容')
   } catch (error) {
+    state.archiveError = error instanceof Error ? error.message : '归档下载失败'
     ElMessage.error(error instanceof Error ? error.message : '归档下载失败')
   } finally {
-    downloadDraftBusy.value = false
+    state.downloadDraftBusy = false
   }
 }
 
@@ -446,12 +527,16 @@ function restoreFromRouteQuery() {
     route.query.taskId,
     route.query.taskIds,
   ].flatMap((value) => (typeof value === 'string' ? parseTaskIds(value) : []))
-  const draftId = typeof route.query.draftId === 'string' ? route.query.draftId.trim() : ''
+  const rawDraftIds = [
+    route.query.draftId,
+    route.query.draftIds,
+  ].flatMap((value) => (typeof value === 'string' ? parseTaskIds(value) : []))
 
-  if (rawTaskIds.length > 0 || draftId) {
+  if (rawTaskIds.length > 0 || rawDraftIds.length > 0) {
     creativeStore.restoreResultContext({
       taskIds: rawTaskIds,
-      draftId: draftId || null,
+      draftIds: rawDraftIds,
+      draftId: rawDraftIds[0] || null,
       pipelineVideoStarted: true,
     })
   }
@@ -510,20 +595,22 @@ watch(
 )
 
 watch(
-  currentDraftId,
-  (value) => {
-    if (!value) {
-      setArchiveIdleState()
-      if (!draftName.value) {
-        draftName.value = buildDefaultDraftName()
-      }
-      return
+  linkedDraftIds,
+  (draftIds) => {
+    for (const draftId of draftIds) {
+      ensureDraftArchiveState(draftId)
     }
-
+    for (const draftId of Object.keys(draftArchiveStates)) {
+      if (!draftIds.includes(draftId)) {
+        delete draftArchiveStates[draftId]
+        delete archivePollTokens[draftId]
+      }
+    }
     if (!draftName.value) {
       draftName.value = buildDefaultDraftName()
     }
   },
+  { immediate: true },
 )
 </script>
 
@@ -734,100 +821,118 @@ watch(
       <div class="flex items-start justify-between gap-4 mb-4">
         <div>
           <h3 class="text-base font-semibold text-gray-900">剪映草稿</h3>
-          <p class="text-sm text-gray-500 mt-1">
-            <template v-if="currentDraftId">
-              当前成片已关联剪映草稿，可以直接归档并下载。
-            </template>
-            <template v-else>
-              当前没有 `draft_id`，可以先创建一个空白剪映草稿。
-            </template>
-          </p>
+          <p class="text-sm text-gray-500 mt-1">{{ draftPanelDescription }}</p>
         </div>
-        <div v-if="currentDraftId" class="draft-chip">
-          draft_id: {{ currentDraftId }}
+        <div v-if="hasLinkedDrafts" class="draft-chip">
+          {{ linkedDraftIds.length }} 个 draft
         </div>
       </div>
 
-      <div class="draft-status-card" :class="`is-${draftStatusMeta.tone}`">
-        <div class="draft-status-main">
-          <div class="draft-status-badge" :class="`is-${draftStatusMeta.tone}`">
-            <Loader2 v-if="draftStatusMeta.tone === 'working'" :size="14" class="animate-spin" />
-            <CheckCircle2 v-else-if="draftStatusMeta.tone === 'success'" :size="14" />
-            <AlertTriangle v-else-if="draftStatusMeta.tone === 'error'" :size="14" />
-            <Clock v-else :size="14" />
-            {{ draftStatusMeta.label }}
-          </div>
-          <div class="draft-status-title">{{ draftStatusMeta.title }}</div>
-          <div class="draft-status-desc">{{ draftStatusMeta.description }}</div>
-        </div>
+      <div v-if="hasLinkedDrafts" class="draft-card-grid">
+        <div
+          v-for="card in draftCards"
+          :key="card.draftId"
+          class="draft-card-shell"
+        >
+          <div class="draft-status-card" :class="`is-${card.statusMeta.tone}`">
+            <div class="flex items-start justify-between gap-4">
+              <div class="draft-status-main">
+                <div class="draft-status-badge" :class="`is-${card.statusMeta.tone}`">
+                  <Loader2 v-if="card.statusMeta.tone === 'working'" :size="14" class="animate-spin" />
+                  <CheckCircle2 v-else-if="card.statusMeta.tone === 'success'" :size="14" />
+                  <AlertTriangle v-else-if="card.statusMeta.tone === 'error'" :size="14" />
+                  <Clock v-else :size="14" />
+                  {{ card.statusMeta.label }}
+                </div>
+                <div class="draft-status-title">视频 {{ card.index + 1 }} 草稿</div>
+                <div class="draft-status-desc">{{ card.statusMeta.description }}</div>
+              </div>
+              <div class="draft-chip is-inline">
+                {{ card.draftId }}
+              </div>
+            </div>
 
-        <div class="draft-step-row">
-          <div class="draft-step" :class="{ done: Boolean(currentDraftId) }">
-            <div class="draft-step-dot">1</div>
-            <div class="draft-step-label">创建草稿</div>
-          </div>
-          <div class="draft-step-line" :class="{ done: Boolean(currentDraftId) && (archivePending || archiveReady || archiveError) }"></div>
-          <div class="draft-step" :class="{ done: archivePending || archiveReady || archiveError, active: archivePending }">
-            <div class="draft-step-dot">2</div>
-            <div class="draft-step-label">发起归档</div>
-          </div>
-          <div class="draft-step-line" :class="{ done: archiveReady }"></div>
-          <div class="draft-step" :class="{ done: archiveReady, active: downloadDraftBusy }">
-            <div class="draft-step-dot">3</div>
-            <div class="draft-step-label">下载归档</div>
-          </div>
-        </div>
+            <div class="draft-guide-note">
+              {{ card.statusMeta.guide }}
+            </div>
 
-        <div class="draft-meta-grid">
-          <div class="draft-meta-item">
-            <div class="draft-meta-label">Draft ID</div>
-            <div class="draft-meta-value">{{ currentDraftId || '未创建' }}</div>
-          </div>
-          <div class="draft-meta-item">
-            <div class="draft-meta-label">Draft Name</div>
-            <div class="draft-meta-value">{{ draftName || '-' }}</div>
-          </div>
-          <div class="draft-meta-item">
-            <div class="draft-meta-label">Resolution</div>
-            <div class="draft-meta-value">{{ draftResolutionLabel }}</div>
-          </div>
-          <div class="draft-meta-item">
-            <div class="draft-meta-label">Archive Folder</div>
-            <div class="draft-meta-value">{{ draftFolder || '未填写' }}</div>
+            <div class="draft-step-row">
+              <div class="draft-step" :class="{ done: true }">
+                <div class="draft-step-dot">1</div>
+                <div class="draft-step-label">草稿已关联</div>
+              </div>
+              <div class="draft-step-line" :class="{ done: card.state.archivePending || card.state.archiveReady || Boolean(card.state.archiveError) }"></div>
+              <div class="draft-step" :class="{ done: card.state.archivePending || card.state.archiveReady || Boolean(card.state.archiveError), active: card.state.archivePending }">
+                <div class="draft-step-dot">2</div>
+                <div class="draft-step-label">发起归档</div>
+              </div>
+              <div class="draft-step-line" :class="{ done: card.state.archiveReady }"></div>
+              <div class="draft-step" :class="{ done: card.state.archiveReady, active: card.state.downloadDraftBusy }">
+                <div class="draft-step-dot">3</div>
+                <div class="draft-step-label">下载归档</div>
+              </div>
+            </div>
+
+            <div class="draft-meta-grid">
+              <div class="draft-meta-item">
+                <div class="draft-meta-label">Draft ID</div>
+                <div class="draft-meta-value">{{ card.draftId }}</div>
+              </div>
+              <div class="draft-meta-item">
+                <div class="draft-meta-label">Video Slot</div>
+                <div class="draft-meta-value">视频 {{ card.index + 1 }}</div>
+              </div>
+              <div class="draft-meta-item">
+                <div class="draft-meta-label">Archive Status</div>
+                <div class="draft-meta-value">{{ card.statusMeta.label }}</div>
+              </div>
+              <div class="draft-meta-item">
+                <div class="draft-meta-label">Archive Folder</div>
+                <div class="draft-meta-value">{{ card.state.folder || '未填写' }}</div>
+              </div>
+            </div>
+
+            <div class="draft-archive-grid">
+              <el-input
+                v-model="card.state.folder"
+                placeholder="输入归档目录，例如 C:/"
+                clearable
+                @keyup.enter="handleArchiveDraft(card.draftId)"
+              />
+              <div class="draft-action-row">
+                <el-button
+                  type="primary"
+                  :loading="card.state.archiveDraftBusy"
+                  @click="handleArchiveDraft(card.draftId)"
+                >
+                  归档草稿
+                </el-button>
+                <el-button
+                  :disabled="!card.canCheckArchive"
+                  :loading="card.state.downloadDraftBusy"
+                  @click="handleDownloadDraft(card.draftId)"
+                >
+                  {{ card.state.archivePending ? '归档生成中...' : card.state.archiveReady ? '下载归档' : '检查归档状态' }}
+                </el-button>
+              </div>
+              <div v-if="card.state.archiveFeedback || card.state.archiveLocation" class="draft-feedback">
+                <div v-if="card.state.archiveFeedback">{{ card.state.archiveFeedback }}</div>
+                <div v-if="card.state.archiveLocation" class="break-all text-gray-500">
+                  {{ card.state.archiveLocation }}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div v-if="!currentDraftId" class="draft-create-grid">
+      <div v-else class="draft-create-grid">
         <el-input v-model="draftName" placeholder="输入草稿名称" clearable />
         <el-input-number v-model="draftWidth" :min="1" :step="1" controls-position="right" />
         <el-input-number v-model="draftHeight" :min="1" :step="1" controls-position="right" />
         <el-button type="primary" :loading="createDraftBusy" @click="handleCreateDraft">
           创建剪映草稿
         </el-button>
-      </div>
-
-      <div v-else class="draft-archive-grid">
-        <el-input
-          v-model="draftFolder"
-          placeholder="输入归档目录，例如 C:/"
-          clearable
-          @keyup.enter="handleArchiveDraft"
-        />
-        <div class="draft-action-row">
-          <el-button type="primary" :loading="archiveDraftBusy" @click="handleArchiveDraft">
-            归档草稿
-          </el-button>
-          <el-button :disabled="!canDownloadArchive" :loading="downloadDraftBusy" @click="handleDownloadDraft">
-            {{ archivePending ? '归档生成中...' : archiveReady ? '下载归档' : '检查并下载' }}
-          </el-button>
-        </div>
-        <div v-if="archiveFeedback || archiveLocation" class="draft-feedback">
-          <div v-if="archiveFeedback">{{ archiveFeedback }}</div>
-          <div v-if="archiveLocation" class="break-all text-gray-500">
-            {{ archiveLocation }}
-          </div>
-        </div>
       </div>
     </div>
 
@@ -1028,6 +1133,19 @@ watch(
   @apply shrink-0 rounded-full bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700;
 }
 
+.draft-chip.is-inline {
+  @apply max-w-full break-all;
+}
+
+.draft-card-grid {
+  @apply grid gap-4;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.draft-card-shell {
+  @apply min-w-0;
+}
+
 .draft-status-card {
   @apply rounded-2xl border px-4 py-4 mb-4;
 }
@@ -1086,6 +1204,10 @@ watch(
 
 .draft-status-desc {
   @apply text-sm leading-6 text-gray-600;
+}
+
+.draft-guide-note {
+  @apply mt-4 rounded-xl border border-dashed border-gray-200 bg-white/80 px-3 py-3 text-sm leading-6 text-gray-600;
 }
 
 .draft-step-row {
@@ -1265,6 +1387,10 @@ watch(
 }
 
 @media (max-width: 960px) {
+  .draft-card-grid {
+    grid-template-columns: 1fr;
+  }
+
   .draft-create-grid,
   .draft-archive-grid {
     grid-template-columns: 1fr;

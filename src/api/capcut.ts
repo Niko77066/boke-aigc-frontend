@@ -827,10 +827,12 @@ const TASK_RESULT_BLOCK_PATTERN = /<TASK_RESULT>\s*([\s\S]*?)\s*<\/TASK_RESULT>/
 interface TaskResultVideoEntry {
   version?: string
   task_id?: string
+  draft_id?: string
 }
 
 interface TaskResultPayload {
   draft_id?: string
+  draft_ids?: string[]
   videos?: TaskResultVideoEntry[]
 }
 
@@ -848,6 +850,14 @@ function extractTaskResultPayload(text: string): TaskResultPayload | null {
       payload.draft_id = draftId
     }
 
+    const rawDraftIds = parsed.draft_ids
+    if (Array.isArray(rawDraftIds)) {
+      payload.draft_ids = rawDraftIds
+        .filter((draft): draft is string => typeof draft === 'string')
+        .map((draft) => draft.trim())
+        .filter(Boolean)
+    }
+
     const rawVideos = parsed.videos
     if (Array.isArray(rawVideos)) {
       payload.videos = rawVideos
@@ -855,6 +865,7 @@ function extractTaskResultPayload(text: string): TaskResultPayload | null {
         .map((video) => ({
           version: pickString(video, ['version']),
           task_id: pickString(video, ['task_id']),
+          draft_id: pickString(video, ['draft_id']),
         }))
     }
 
@@ -922,23 +933,44 @@ export function extractVideoUrls(text: string): string[] {
 }
 
 /**
- * Extract draft_id from pipeline output text.
+ * Extract ALL draft_ids from pipeline output text.
  */
-export function extractDraftId(text: string): string | null {
+export function extractAllDraftIds(text: string): string[] {
   const taskResult = extractTaskResultPayload(text)
-  if (taskResult?.draft_id?.trim()) {
-    return taskResult.draft_id.trim()
+  const taskResultDraftIds = [
+    ...(taskResult?.draft_ids ?? []),
+    ...(taskResult?.videos
+      ?.map((video) => video.draft_id?.trim() || '')
+      .filter(Boolean) ?? []),
+    taskResult?.draft_id?.trim() || '',
+  ].filter(Boolean)
+  if (taskResultDraftIds.length > 0) {
+    return [...new Set(taskResultDraftIds)]
   }
 
+  const tailText = getTaskExtractionTail(text)
   const patterns = [
-    /\bdraft[\s_-]*id\b\s*[：:=]\s*[("'`“”‘’]*([a-zA-Z0-9_-]+)[)"'`“”‘’]*/i,
-    /draft_id["\s]*[：:=]\s*["']?([a-zA-Z0-9_-]+)["']?/i,
-    /草稿ID[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/,
+    /\bdraft[\s_-]*id\b\s*[：:=]\s*[("'`“”‘’]*([a-zA-Z0-9_-]+)[)"'`“”‘’]*/gi,
+    /draft_id["\s]*[：:=]\s*["']?([a-zA-Z0-9_-]+)["']?/gi,
+    /草稿ID[：:]\s*["']?([a-zA-Z0-9_-]+)["']?/g,
   ]
 
-  for (const p of patterns) {
-    const m = text.match(p)
-    if (m?.[1]) return m[1]
+  const seen = new Set<string>()
+  for (const pattern of patterns) {
+    for (const match of tailText.matchAll(pattern)) {
+      const draftId = match[1]?.trim()
+      if (draftId) {
+        seen.add(draftId)
+      }
+    }
   }
-  return null
+
+  return [...seen]
+}
+
+/**
+ * Extract the first draft_id from pipeline output text.
+ */
+export function extractDraftId(text: string): string | null {
+  return extractAllDraftIds(text)[0] ?? null
 }

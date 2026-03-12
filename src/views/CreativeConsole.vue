@@ -32,6 +32,7 @@ function redirectToResult() {
     path: '/result',
     query: {
       taskIds: creativeStore.videoTaskIds.join(',') || undefined,
+      draftIds: creativeStore.videoDraftIds.join(',') || undefined,
       draftId: creativeStore.videoDraftId || undefined,
     },
   })
