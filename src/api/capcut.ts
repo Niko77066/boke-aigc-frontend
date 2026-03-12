@@ -93,6 +93,7 @@ export interface SaveDraftArchivePayload {
 
 export interface SaveDraftArchiveResponse {
   draft_id: string
+  draft_version?: number
   archive_path?: string
   archive_url?: string
   message?: string
@@ -101,12 +102,14 @@ export interface SaveDraftArchiveResponse {
 
 export interface DraftArchiveDownloadResponse {
   draft_id: string
+  draft_version?: number
   url?: string
   filename?: string
   blob?: Blob
 }
 
 interface PollArchiveDownloadOptions {
+  draftVersion?: number
   intervalMs?: number
   timeoutMs?: number
 }
@@ -491,15 +494,22 @@ export async function saveDraftArchive(payload: SaveDraftArchivePayload): Promis
   return {
     ...data,
     draft_id: pickString(data, ['draft_id']) ?? payload.draft_id,
+    draft_version: pickNumber(data, ['draft_version', 'version']),
     archive_path: pickString(data, ['archive_path', 'path', 'file_path']),
     archive_url: pickString(data, ['archive_url', 'url']),
     message: pickString(data, ['message', 'detail']),
   }
 }
 
-export async function getDraftArchiveDownload(draftId: string): Promise<DraftArchiveDownloadResponse> {
+async function requestDraftArchiveDownload(
+  draftId: string,
+  draftVersion?: number,
+): Promise<DraftArchiveDownloadResponse> {
   const url = new URL(buildCapcutApiUrl(CAPCUT_ARCHIVES_DOWNLOAD_PATH), window.location.origin)
   url.searchParams.set('draft_id', draftId)
+  if (typeof draftVersion === 'number' && Number.isFinite(draftVersion)) {
+    url.searchParams.set('draft_version', String(draftVersion))
+  }
 
   let res: Response
 
@@ -531,6 +541,7 @@ export async function getDraftArchiveDownload(draftId: string): Promise<DraftArc
 
     return {
       draft_id: draftId,
+      draft_version: pickNumber(payload, ['draft_version', 'version']) ?? draftVersion,
       url: downloadUrl,
       filename: pickString(payload, ['filename', 'file_name']) ?? filename,
     }
@@ -540,7 +551,7 @@ export async function getDraftArchiveDownload(draftId: string): Promise<DraftArc
     const text = (await res.text()).trim()
 
     if (/^https?:\/\//i.test(text)) {
-      return { draft_id: draftId, url: text, filename }
+      return { draft_id: draftId, draft_version: draftVersion, url: text, filename }
     }
 
     throw new Error(text || '下载接口返回为空')
@@ -548,8 +559,49 @@ export async function getDraftArchiveDownload(draftId: string): Promise<DraftArc
 
   return {
     draft_id: draftId,
+    draft_version: draftVersion,
     filename,
     blob: await res.blob(),
+  }
+}
+
+function shouldProbeArchiveVersions(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+
+  const message = error.message.toLowerCase()
+  return message.includes('version none') || message.includes('archive not found')
+}
+
+async function probeDraftArchiveDownloadVersions(draftId: string): Promise<DraftArchiveDownloadResponse> {
+  for (let version = 10; version >= 1; version -= 1) {
+    try {
+      return await requestDraftArchiveDownload(draftId, version)
+    } catch (error) {
+      if (!shouldProbeArchiveVersions(error)) {
+        throw error
+      }
+    }
+  }
+
+  throw new Error(`Archive not found for draft ${draftId}`)
+}
+
+export async function getDraftArchiveDownload(
+  draftId: string,
+  draftVersion?: number,
+): Promise<DraftArchiveDownloadResponse> {
+  if (typeof draftVersion === 'number' && Number.isFinite(draftVersion)) {
+    return requestDraftArchiveDownload(draftId, draftVersion)
+  }
+
+  try {
+    return await requestDraftArchiveDownload(draftId)
+  } catch (error) {
+    if (!shouldProbeArchiveVersions(error)) {
+      throw error
+    }
+
+    return probeDraftArchiveDownloadVersions(draftId)
   }
 }
 
@@ -557,13 +609,14 @@ export async function pollDraftArchiveDownload(
   draftId: string,
   options: PollArchiveDownloadOptions = {},
 ): Promise<DraftArchiveDownloadResponse> {
+  const draftVersion = options.draftVersion
   const intervalMs = options.intervalMs ?? 3000
   const timeoutMs = options.timeoutMs ?? 120000
   const start = Date.now()
 
   while (Date.now() - start < timeoutMs) {
     try {
-      return await getDraftArchiveDownload(draftId)
+      return await getDraftArchiveDownload(draftId, draftVersion)
     } catch (error) {
       if (!shouldRetryArchiveDownload(error)) {
         throw error

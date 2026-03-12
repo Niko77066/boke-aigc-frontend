@@ -104,6 +104,7 @@ const archiveLocation = ref('')
 const archivePending = ref(false)
 const archiveReady = ref(false)
 const archiveError = ref('')
+const archiveDraftVersion = ref<number | null>(null)
 const readyArchiveDownload = ref<DraftArchiveDownloadResponse | null>(null)
 
 let archivePollToken = 0
@@ -177,10 +178,11 @@ function setArchiveIdleState() {
   archiveError.value = ''
   archiveFeedback.value = ''
   archiveLocation.value = ''
+  archiveDraftVersion.value = null
   readyArchiveDownload.value = null
 }
 
-async function waitForArchiveReady(draftId: string) {
+async function waitForArchiveReady(draftId: string, draftVersion?: number | null) {
   const token = ++archivePollToken
 
   archivePending.value = true
@@ -191,6 +193,7 @@ async function waitForArchiveReady(draftId: string) {
 
   try {
     const result = await pollDraftArchiveDownload(draftId, {
+      draftVersion: typeof draftVersion === 'number' ? draftVersion : undefined,
       intervalMs: 3000,
       timeoutMs: 180000,
     })
@@ -200,6 +203,7 @@ async function waitForArchiveReady(draftId: string) {
     archivePending.value = false
     archiveReady.value = true
     archiveError.value = ''
+    archiveDraftVersion.value = result.draft_version ?? draftVersion ?? null
     readyArchiveDownload.value = result
     archiveFeedback.value = '归档包已生成，可以直接下载。'
     if (result.url) {
@@ -373,10 +377,11 @@ async function handleArchiveDraft() {
       draft_id: draftId,
       draft_folder: folder,
     })
+    archiveDraftVersion.value = result.draft_version ?? archiveDraftVersion.value
     archiveFeedback.value = result.message || '已发起草稿归档，归档包生成后可下载'
     archiveLocation.value = result.archive_path || result.archive_url || ''
     ElMessage.success(archiveFeedback.value)
-    void waitForArchiveReady(draftId)
+    void waitForArchiveReady(draftId, archiveDraftVersion.value)
   } catch (error) {
     archivePending.value = false
     archiveReady.value = false
@@ -398,12 +403,13 @@ async function handleDownloadDraft() {
 
   try {
     const result = readyArchiveDownload.value
-      ?? await getDraftArchiveDownload(draftId)
+      ?? await getDraftArchiveDownload(draftId, archiveDraftVersion.value ?? undefined)
 
     if (result.url) {
       window.open(result.url, '_blank', 'noopener,noreferrer')
       archivePending.value = false
       archiveReady.value = true
+      archiveDraftVersion.value = result.draft_version ?? archiveDraftVersion.value
       readyArchiveDownload.value = result
       archiveLocation.value = result.url
       ElMessage.success('已打开归档下载链接')
@@ -421,6 +427,7 @@ async function handleDownloadDraft() {
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
       archivePending.value = false
       archiveReady.value = true
+      archiveDraftVersion.value = result.draft_version ?? archiveDraftVersion.value
       readyArchiveDownload.value = result
       ElMessage.success('归档下载已开始')
       return
