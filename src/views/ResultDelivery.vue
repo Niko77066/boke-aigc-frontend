@@ -99,6 +99,7 @@ const createDraftBusy = ref(false)
 type DraftStatusTone = 'idle' | 'ready' | 'working' | 'success' | 'error'
 
 interface DraftArchiveState {
+  archiveId: string
   folder: string
   archiveDraftBusy: boolean
   downloadDraftBusy: boolean
@@ -107,7 +108,6 @@ interface DraftArchiveState {
   archivePending: boolean
   archiveReady: boolean
   archiveError: string
-  archiveDraftVersion: number | null
   readyArchiveDownload: DraftArchiveDownloadResponse | null
 }
 
@@ -116,6 +116,7 @@ const archivePollTokens: Record<string, number> = {}
 
 function createDraftArchiveState(): DraftArchiveState {
   return {
+    archiveId: '',
     folder: '',
     archiveDraftBusy: false,
     downloadDraftBusy: false,
@@ -124,7 +125,6 @@ function createDraftArchiveState(): DraftArchiveState {
     archivePending: false,
     archiveReady: false,
     archiveError: '',
-    archiveDraftVersion: null,
     readyArchiveDownload: null,
   }
 }
@@ -132,6 +132,10 @@ function createDraftArchiveState(): DraftArchiveState {
 function ensureDraftArchiveState(draftId: string): DraftArchiveState {
   if (!draftArchiveStates[draftId]) {
     draftArchiveStates[draftId] = createDraftArchiveState()
+  }
+  const persistedArchiveId = creativeStore.getDraftArchiveId(draftId)
+  if (persistedArchiveId && !draftArchiveStates[draftId].archiveId) {
+    draftArchiveStates[draftId].archiveId = persistedArchiveId
   }
   return draftArchiveStates[draftId]
 }
@@ -178,18 +182,19 @@ const draftPanelDescription = computed(() => {
 
 function resetDraftArchiveState(draftId: string) {
   const state = ensureDraftArchiveState(draftId)
+  state.archiveId = ''
   state.archivePending = false
   state.archiveReady = false
   state.archiveError = ''
   state.archiveFeedback = ''
   state.archiveLocation = ''
-  state.archiveDraftVersion = null
   state.readyArchiveDownload = null
+  creativeStore.setDraftArchiveId(draftId, null)
 }
 
 function canCheckArchive(draftId: string): boolean {
   const state = ensureDraftArchiveState(draftId)
-  return Boolean(draftId) && !state.archivePending && !state.archiveDraftBusy
+  return Boolean(draftId) && Boolean(state.archiveId) && !state.archivePending && !state.archiveDraftBusy
 }
 
 function getDraftStatusMeta(draftId: string): {
@@ -260,8 +265,16 @@ const draftCards = computed(() => {
   }))
 })
 
-async function waitForArchiveReady(draftId: string, draftVersion?: number | null) {
+async function waitForArchiveReady(draftId: string) {
   const state = ensureDraftArchiveState(draftId)
+  const archiveId = state.archiveId.trim()
+  if (!archiveId) {
+    state.archivePending = false
+    state.archiveReady = false
+    state.archiveError = '归档任务缺少 archive_id，无法检查归档状态'
+    return
+  }
+
   const token = (archivePollTokens[draftId] ?? 0) + 1
   archivePollTokens[draftId] = token
 
@@ -272,8 +285,7 @@ async function waitForArchiveReady(draftId: string, draftVersion?: number | null
   state.archiveFeedback = '归档任务已提交，正在等待归档包生成...'
 
   try {
-    const result = await pollDraftArchiveDownload(draftId, {
-      draftVersion: typeof draftVersion === 'number' ? draftVersion : undefined,
+    const result = await pollDraftArchiveDownload(archiveId, {
       intervalMs: 3000,
       timeoutMs: 180000,
     })
@@ -283,7 +295,8 @@ async function waitForArchiveReady(draftId: string, draftVersion?: number | null
     state.archivePending = false
     state.archiveReady = true
     state.archiveError = ''
-    state.archiveDraftVersion = result.draft_version ?? draftVersion ?? null
+    state.archiveId = result.archive_id || archiveId
+    creativeStore.setDraftArchiveId(draftId, state.archiveId)
     state.readyArchiveDownload = result
     state.archiveFeedback = '归档包已生成，可以直接下载。'
     if (result.url) {
@@ -446,22 +459,25 @@ async function handleArchiveDraft(draftId: string) {
   }
 
   state.archiveDraftBusy = true
+  state.archiveId = ''
   state.archiveReady = false
   state.archiveError = ''
   state.archiveFeedback = ''
   state.archiveLocation = ''
   state.readyArchiveDownload = null
+  creativeStore.setDraftArchiveId(draftId, null)
 
   try {
     const result = await saveDraftArchive({
       draft_id: draftId,
       draft_folder: folder,
     })
-    state.archiveDraftVersion = result.draft_version ?? state.archiveDraftVersion
+    state.archiveId = result.archive_id
+    creativeStore.setDraftArchiveId(draftId, result.archive_id)
     state.archiveFeedback = result.message || '已发起草稿归档，请等待归档包生成后再下载。'
-    state.archiveLocation = result.archive_path || result.archive_url || ''
+    state.archiveLocation = result.archive_url || result.archive_path || result.archive_id
     ElMessage.success(`已提交归档：${draftId}，请等待归档包生成后再下载。`)
-    void waitForArchiveReady(draftId, state.archiveDraftVersion)
+    void waitForArchiveReady(draftId)
   } catch (error) {
     state.archivePending = false
     state.archiveReady = false
@@ -474,8 +490,13 @@ async function handleArchiveDraft(draftId: string) {
 
 async function handleDownloadDraft(draftId: string) {
   const state = ensureDraftArchiveState(draftId)
+  const archiveId = state.archiveId.trim()
   if (!draftId) {
     ElMessage.warning('当前没有可下载的 draft_id')
+    return
+  }
+  if (!archiveId) {
+    ElMessage.warning('当前还没有 archive_id，请先发起归档')
     return
   }
 
@@ -483,15 +504,16 @@ async function handleDownloadDraft(draftId: string) {
 
   try {
     const result = state.readyArchiveDownload
-      ?? await getDraftArchiveDownload(draftId, state.archiveDraftVersion ?? undefined)
+      ?? await getDraftArchiveDownload(archiveId)
 
     if (result.url) {
       window.open(result.url, '_blank', 'noopener,noreferrer')
       state.archivePending = false
       state.archiveReady = true
-      state.archiveDraftVersion = result.draft_version ?? state.archiveDraftVersion
+      state.archiveId = result.archive_id || archiveId
       state.readyArchiveDownload = result
       state.archiveLocation = result.url
+      creativeStore.setDraftArchiveId(draftId, state.archiveId)
       ElMessage.success(`已打开归档下载链接：${draftId}`)
       return
     }
@@ -500,15 +522,16 @@ async function handleDownloadDraft(draftId: string) {
       const objectUrl = URL.createObjectURL(result.blob)
       const link = document.createElement('a')
       link.href = objectUrl
-      link.download = result.filename || `${draftId}.zip`
+      link.download = result.filename || `${archiveId}.zip`
       document.body.appendChild(link)
       link.click()
       link.remove()
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
       state.archivePending = false
       state.archiveReady = true
-      state.archiveDraftVersion = result.draft_version ?? state.archiveDraftVersion
+      state.archiveId = result.archive_id || archiveId
       state.readyArchiveDownload = result
+      creativeStore.setDraftArchiveId(draftId, state.archiveId)
       ElMessage.success(`归档下载已开始：${draftId}`)
       return
     }
@@ -887,6 +910,10 @@ watch(
                 <div class="draft-meta-value">{{ card.statusMeta.label }}</div>
               </div>
               <div class="draft-meta-item">
+                <div class="draft-meta-label">Archive ID</div>
+                <div class="draft-meta-value">{{ card.state.archiveId || '待归档生成' }}</div>
+              </div>
+              <div class="draft-meta-item">
                 <div class="draft-meta-label">Archive Folder</div>
                 <div class="draft-meta-value">{{ card.state.folder || '未填写' }}</div>
               </div>
@@ -912,7 +939,15 @@ watch(
                   :loading="card.state.downloadDraftBusy"
                   @click="handleDownloadDraft(card.draftId)"
                 >
-                  {{ card.state.archivePending ? '归档生成中...' : card.state.archiveReady ? '下载归档' : '检查归档状态' }}
+                  {{
+                    card.state.archivePending
+                      ? '归档生成中...'
+                      : card.state.archiveReady
+                        ? '下载归档'
+                        : card.state.archiveId
+                          ? '检查归档状态'
+                          : '等待归档任务'
+                  }}
                 </el-button>
               </div>
               <div v-if="card.state.archiveFeedback || card.state.archiveLocation" class="draft-feedback">

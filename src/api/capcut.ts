@@ -92,6 +92,7 @@ export interface SaveDraftArchivePayload {
 }
 
 export interface SaveDraftArchiveResponse {
+  archive_id: string
   draft_id: string
   draft_version?: number
   archive_path?: string
@@ -101,7 +102,8 @@ export interface SaveDraftArchiveResponse {
 }
 
 export interface DraftArchiveDownloadResponse {
-  draft_id: string
+  archive_id: string
+  draft_id?: string
   draft_version?: number
   url?: string
   filename?: string
@@ -109,7 +111,6 @@ export interface DraftArchiveDownloadResponse {
 }
 
 interface PollArchiveDownloadOptions {
-  draftVersion?: number
   intervalMs?: number
   timeoutMs?: number
 }
@@ -491,8 +492,14 @@ export async function saveDraftArchive(payload: SaveDraftArchivePayload): Promis
     '归档剪映草稿失败',
   )
 
+  const archiveId = pickString(data, ['archive_id'])
+  if (!archiveId) {
+    throw new Error('归档剪映草稿成功，但返回缺少 archive_id')
+  }
+
   return {
     ...data,
+    archive_id: archiveId,
     draft_id: pickString(data, ['draft_id']) ?? payload.draft_id,
     draft_version: pickNumber(data, ['draft_version', 'version']),
     archive_path: pickString(data, ['archive_path', 'path', 'file_path']),
@@ -502,14 +509,12 @@ export async function saveDraftArchive(payload: SaveDraftArchivePayload): Promis
 }
 
 async function requestDraftArchiveDownload(
-  draftId: string,
-  draftVersion?: number,
+  archiveId: string,
 ): Promise<DraftArchiveDownloadResponse> {
-  const url = new URL(buildCapcutApiUrl(CAPCUT_ARCHIVES_DOWNLOAD_PATH), window.location.origin)
-  url.searchParams.set('draft_id', draftId)
-  if (typeof draftVersion === 'number' && Number.isFinite(draftVersion)) {
-    url.searchParams.set('draft_version', String(draftVersion))
-  }
+  const url = new URL(
+    buildCapcutApiUrl(`${CAPCUT_ARCHIVES_DOWNLOAD_PATH}/${encodeURIComponent(archiveId)}`),
+    window.location.origin,
+  )
 
   let res: Response
 
@@ -528,7 +533,7 @@ async function requestDraftArchiveDownload(
   }
 
   const contentType = (res.headers.get('content-type') || '').toLowerCase()
-  const filename = getDownloadFilename(res.headers.get('content-disposition'), `${draftId}.zip`)
+  const filename = getDownloadFilename(res.headers.get('content-disposition'), `${archiveId}.zip`)
 
   if (contentType.includes('application/json')) {
     const rawPayload = await res.json().catch(() => null)
@@ -540,8 +545,9 @@ async function requestDraftArchiveDownload(
     }
 
     return {
-      draft_id: draftId,
-      draft_version: pickNumber(payload, ['draft_version', 'version']) ?? draftVersion,
+      archive_id: pickString(payload, ['archive_id']) ?? archiveId,
+      draft_id: pickString(payload, ['draft_id']),
+      draft_version: pickNumber(payload, ['draft_version', 'version']),
       url: downloadUrl,
       filename: pickString(payload, ['filename', 'file_name']) ?? filename,
     }
@@ -551,72 +557,36 @@ async function requestDraftArchiveDownload(
     const text = (await res.text()).trim()
 
     if (/^https?:\/\//i.test(text)) {
-      return { draft_id: draftId, draft_version: draftVersion, url: text, filename }
+      return { archive_id: archiveId, url: text, filename }
     }
 
     throw new Error(text || '下载接口返回为空')
   }
 
   return {
-    draft_id: draftId,
-    draft_version: draftVersion,
+    archive_id: archiveId,
     filename,
     blob: await res.blob(),
   }
 }
 
-function shouldProbeArchiveVersions(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-
-  const message = error.message.toLowerCase()
-  return message.includes('version none') || message.includes('archive not found')
-}
-
-async function probeDraftArchiveDownloadVersions(draftId: string): Promise<DraftArchiveDownloadResponse> {
-  for (let version = 10; version >= 1; version -= 1) {
-    try {
-      return await requestDraftArchiveDownload(draftId, version)
-    } catch (error) {
-      if (!shouldProbeArchiveVersions(error)) {
-        throw error
-      }
-    }
-  }
-
-  throw new Error(`Archive not found for draft ${draftId}`)
-}
-
 export async function getDraftArchiveDownload(
-  draftId: string,
-  draftVersion?: number,
+  archiveId: string,
 ): Promise<DraftArchiveDownloadResponse> {
-  if (typeof draftVersion === 'number' && Number.isFinite(draftVersion)) {
-    return requestDraftArchiveDownload(draftId, draftVersion)
-  }
-
-  try {
-    return await requestDraftArchiveDownload(draftId)
-  } catch (error) {
-    if (!shouldProbeArchiveVersions(error)) {
-      throw error
-    }
-
-    return probeDraftArchiveDownloadVersions(draftId)
-  }
+  return requestDraftArchiveDownload(archiveId)
 }
 
 export async function pollDraftArchiveDownload(
-  draftId: string,
+  archiveId: string,
   options: PollArchiveDownloadOptions = {},
 ): Promise<DraftArchiveDownloadResponse> {
-  const draftVersion = options.draftVersion
   const intervalMs = options.intervalMs ?? 3000
   const timeoutMs = options.timeoutMs ?? 120000
   const start = Date.now()
 
   while (Date.now() - start < timeoutMs) {
     try {
-      return await getDraftArchiveDownload(draftId, draftVersion)
+      return await getDraftArchiveDownload(archiveId)
     } catch (error) {
       if (!shouldRetryArchiveDownload(error)) {
         throw error

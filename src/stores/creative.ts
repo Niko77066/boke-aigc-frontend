@@ -37,6 +37,7 @@ interface PersistedCreativeState {
   videoTaskIds: string[]
   videoDraftIds?: string[]
   videoDraftId: string | null
+  draftArchiveIds?: Record<string, string>
   videoRenderStatuses: VideoTaskStatus[]
 }
 
@@ -64,6 +65,11 @@ export const useCreativeStore = defineStore('creative', () => {
   const initialVideoDraftIds = normalizeVideoDraftIdsList(
     persisted?.videoDraftIds
       ?? (persisted?.videoDraftId ? [persisted.videoDraftId] : []),
+  )
+  const initialDraftArchiveIds = Object.fromEntries(
+    Object.entries(persisted?.draftArchiveIds ?? {})
+      .map(([draftId, archiveId]) => [draftId.trim(), archiveId.trim()] as const)
+      .filter(([draftId, archiveId]) => Boolean(draftId) && Boolean(archiveId)),
   )
   const initialVideoRenderStatuses = new Map(
     (persisted?.videoRenderStatuses ?? [])
@@ -93,6 +99,7 @@ export const useCreativeStore = defineStore('creative', () => {
   const videoTaskIds = ref<string[]>(initialVideoTaskIds)
   const videoDraftIds = ref<string[]>(initialVideoDraftIds)
   const videoDraftId = computed(() => videoDraftIds.value[0] ?? null)
+  const draftArchiveIds = ref<Record<string, string>>(initialDraftArchiveIds)
   const videoRenderStatuses = ref<Map<string, VideoTaskStatus>>(initialVideoRenderStatuses)
   const videoPollingCount = ref(0)
   const activeVideoPolling = new Set<string>()
@@ -139,6 +146,7 @@ export const useCreativeStore = defineStore('creative', () => {
       videoTaskIds: videoTaskIds.value,
       videoDraftIds: videoDraftIds.value,
       videoDraftId: videoDraftId.value,
+      draftArchiveIds: draftArchiveIds.value,
       videoRenderStatuses: [...videoRenderStatuses.value.values()],
     }),
     (state) => {
@@ -150,6 +158,7 @@ export const useCreativeStore = defineStore('creative', () => {
   function clearVideoTracking() {
     videoTaskIds.value = []
     videoDraftIds.value = []
+    draftArchiveIds.value = {}
     videoRenderStatuses.value = new Map()
     videoPollingCount.value = 0
     activeVideoPolling.clear()
@@ -178,7 +187,14 @@ export const useCreativeStore = defineStore('creative', () => {
   }
 
   function applyVideoDraftIds(draftIds: string[]) {
-    videoDraftIds.value = normalizeVideoDraftIds(draftIds)
+    const normalized = normalizeVideoDraftIds(draftIds)
+    const allowedDraftIds = new Set(normalized)
+    const nextArchiveIds = Object.fromEntries(
+      Object.entries(draftArchiveIds.value).filter(([draftId]) => allowedDraftIds.has(draftId)),
+    )
+
+    videoDraftIds.value = normalized
+    draftArchiveIds.value = nextArchiveIds
     return videoDraftIds.value
   }
 
@@ -186,6 +202,28 @@ export const useCreativeStore = defineStore('creative', () => {
     const normalizedDraftId = draftId.trim()
     if (!normalizedDraftId) return videoDraftIds.value
     return applyVideoDraftIds([...videoDraftIds.value, normalizedDraftId])
+  }
+
+  function setDraftArchiveId(draftId: string, archiveId: string | null) {
+    const normalizedDraftId = draftId.trim()
+    if (!normalizedDraftId) return
+
+    const nextArchiveIds = { ...draftArchiveIds.value }
+    const normalizedArchiveId = archiveId?.trim()
+
+    if (normalizedArchiveId) {
+      nextArchiveIds[normalizedDraftId] = normalizedArchiveId
+    } else {
+      delete nextArchiveIds[normalizedDraftId]
+    }
+
+    draftArchiveIds.value = nextArchiveIds
+  }
+
+  function getDraftArchiveId(draftId: string): string | null {
+    const normalizedDraftId = draftId.trim()
+    if (!normalizedDraftId) return null
+    return draftArchiveIds.value[normalizedDraftId] ?? null
   }
 
   // ── Config helpers ──────────────────────────────────────────────
@@ -488,9 +526,10 @@ export const useCreativeStore = defineStore('creative', () => {
     pipelineError, pipelineVideoStarted,
     generateCopy, generateVideo, abortPipeline, resetPipeline,
     // video render tracking (multi)
-    videoTaskIds, videoDraftIds, videoDraftId, videoRenderStatuses, videoPollingCount,
+    videoTaskIds, videoDraftIds, videoDraftId, draftArchiveIds, videoRenderStatuses, videoPollingCount,
     videoAllDone, videoStatusList, hasRecoverableResult,
     trackVideoTask, onAllVideosDone, addVideoDraftId, setVideoDraftId, setVideoDraftIds,
+    setDraftArchiveId, getDraftArchiveId,
     restoreResultContext, resumePendingVideoPolling, recoverVideoTasksFromOutput,
   }
 })
