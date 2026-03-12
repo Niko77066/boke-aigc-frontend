@@ -30,6 +30,8 @@ spec:
               value: "${CAPCUT_API_BASE_URL}"
             - name: VITE_CAPCUT_API_KEY
               value: "${CAPCUT_API_KEY}"
+            - name: PIPELINE_AUTHORIZATION
+              value: "${PIPELINE_AUTHORIZATION}"
           readinessProbe:
             httpGet:
               path: /healthz

@@ -1,7 +1,6 @@
 // FastGPT Pipeline API - OpenAI-compatible chat completions with workflow variables
 
-const PIPELINE_URL = 'https://ai.blue-converse.com/api/v1/chat/completions'
-const PIPELINE_KEY = 'Bearer converse-yZLNsh2BGTWNL65KHFAmry3R2wGGCcs4vBWl2WOtPBzg8bnIUocHvjlxcAIN'
+const PIPELINE_URL = '/api/pipeline/v1/chat/completions'
 
 // ── Option constants ──────────────────────────────────────────────
 
@@ -71,6 +70,122 @@ export interface StreamDelta {
   chatId?: string
 }
 
+interface PipelineErrorPayload {
+  error?: string | { message?: string }
+  message?: string
+  detail?: string
+}
+
+interface SSEEventFrame {
+  event: string
+  data: string
+}
+
+function extractErrorMessage(payload: string): string | null {
+  if (!payload.trim()) return null
+
+  try {
+    const parsed = JSON.parse(payload) as PipelineErrorPayload
+    if (typeof parsed.error === 'string' && parsed.error.trim()) return parsed.error.trim()
+    if (typeof parsed.error === 'object' && parsed.error !== null && typeof parsed.error.message === 'string' && parsed.error.message.trim()) {
+      return parsed.error.message.trim()
+    }
+    if (typeof parsed.message === 'string' && parsed.message.trim()) return parsed.message.trim()
+    if (typeof parsed.detail === 'string' && parsed.detail.trim()) return parsed.detail.trim()
+  } catch {
+    return payload.trim()
+  }
+
+  return null
+}
+
+function parseSSEFrames(chunk: string): SSEEventFrame[] {
+  const normalized = chunk.replace(/\r\n/g, '\n')
+  const rawFrames = normalized.split('\n\n')
+  const frames: SSEEventFrame[] = []
+
+  for (const rawFrame of rawFrames) {
+    const lines = rawFrame.split('\n')
+    let event = 'message'
+    const dataLines: string[] = []
+
+    for (const line of lines) {
+      if (!line || line.startsWith(':')) continue
+      if (line.startsWith('event:')) {
+        event = line.slice(6).trim() || 'message'
+        continue
+      }
+      if (line.startsWith('data:')) {
+        dataLines.push(line.slice(5).trimStart())
+      }
+    }
+
+    if (dataLines.length === 0) continue
+    frames.push({ event, data: dataLines.join('\n') })
+  }
+
+  return frames
+}
+
+function consumeSSEBuffer(buffer: string): { frames: SSEEventFrame[]; remainder: string } {
+  const normalized = buffer.replace(/\r\n/g, '\n')
+  const lastDelimiterIndex = normalized.lastIndexOf('\n\n')
+
+  if (lastDelimiterIndex === -1) {
+    return { frames: [], remainder: buffer }
+  }
+
+  const complete = normalized.slice(0, lastDelimiterIndex)
+  const remainder = normalized.slice(lastDelimiterIndex + 2)
+
+  return {
+    frames: parseSSEFrames(complete),
+    remainder,
+  }
+}
+
+function handleStreamFrame(
+  frame: SSEEventFrame,
+  state: { fullText: string; chatId?: string },
+  onDelta: (text: string) => void,
+): { shouldStop: boolean; error: Error | null } {
+  const payload = frame.data.trim()
+  if (!payload || payload === '[DONE]') {
+    return { shouldStop: payload === '[DONE]', error: null }
+  }
+
+  if (frame.event === 'error') {
+    return {
+      shouldStop: true,
+      error: new Error(extractErrorMessage(payload) || 'Pipeline stream error'),
+    }
+  }
+
+  if (frame.event !== 'answer' && frame.event !== 'message') {
+    return { shouldStop: false, error: null }
+  }
+
+  try {
+    const parsed: StreamDelta = JSON.parse(payload)
+    if (parsed.chatId) state.chatId = parsed.chatId
+
+    const choice = parsed.choices?.[0]
+    const content = choice?.delta?.content
+    if (content) {
+      state.fullText += content
+      onDelta(content)
+    }
+
+    return { shouldStop: choice?.finish_reason === 'stop', error: null }
+  } catch {
+    const maybeError = extractErrorMessage(payload)
+    if (maybeError) {
+      return { shouldStop: true, error: new Error(maybeError) }
+    }
+    return { shouldStop: false, error: null }
+  }
+}
+
 // ── Streaming call ────────────────────────────────────────────────
 
 export async function callPipelineStream(
@@ -93,8 +208,8 @@ export async function callPipelineStream(
     res = await fetch(PIPELINE_URL, {
       method: 'POST',
       headers: {
+        Accept: 'text/event-stream, application/json',
         'Content-Type': 'application/json',
-        Authorization: PIPELINE_KEY,
       },
       body: JSON.stringify(body),
       signal,
@@ -105,7 +220,9 @@ export async function callPipelineStream(
   }
 
   if (!res.ok) {
-    onError(new Error(`Pipeline API ${res.status}: ${res.statusText}`))
+    const errorText = await res.text().catch(() => '')
+    const detail = extractErrorMessage(errorText)
+    onError(new Error(detail || `Pipeline API ${res.status}: ${res.statusText}`))
     return
   }
 
@@ -117,39 +234,27 @@ export async function callPipelineStream(
 
   const decoder = new TextDecoder()
   let buffer = ''
-  let fullText = ''
-  let chatId: string | undefined
+  const streamState: { fullText: string; chatId?: string } = { fullText: '' }
+  let shouldStop = false
+  let streamError: Error | null = null
 
   try {
-    while (true) {
+    while (!shouldStop) {
       const { done, value } = await reader.read()
       if (done) break
 
       buffer += decoder.decode(value, { stream: true })
+      const { frames, remainder } = consumeSSEBuffer(buffer)
+      buffer = remainder
 
-      // Process SSE lines
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed || trimmed === 'data: [DONE]') continue
-        if (!trimmed.startsWith('data:')) continue
-
-        const json = trimmed.slice(5).trim()
-        if (!json || json === '[DONE]') continue
-
-        try {
-          const parsed: StreamDelta = JSON.parse(json)
-          if (parsed.chatId) chatId = parsed.chatId
-          const content = parsed.choices?.[0]?.delta?.content
-          if (content) {
-            fullText += content
-            onDelta(content)
-          }
-        } catch {
-          // skip malformed JSON chunks
+      for (const frame of frames) {
+        const result = handleStreamFrame(frame, streamState, onDelta)
+        shouldStop = result.shouldStop
+        if (result.error) {
+          streamError = result.error
+          break
         }
+        if (shouldStop) break
       }
     }
   } catch (e) {
@@ -158,7 +263,24 @@ export async function callPipelineStream(
     return
   }
 
-  onDone(fullText, chatId)
+  if (!shouldStop && buffer.trim()) {
+    const trailingFrames = parseSSEFrames(`${buffer}\n\n`)
+    for (const frame of trailingFrames) {
+      const result = handleStreamFrame(frame, streamState, onDelta)
+      if (result.error) {
+        streamError = result.error
+        break
+      }
+      if (result.shouldStop) break
+    }
+  }
+
+  if (streamError) {
+    onError(streamError)
+    return
+  }
+
+  onDone(streamState.fullText, streamState.chatId)
 }
 
 // ── Non-streaming call ────────────────────────────────────────────
@@ -178,15 +300,17 @@ export async function callPipeline(
   const res = await fetch(PIPELINE_URL, {
     method: 'POST',
     headers: {
+      Accept: 'application/json',
       'Content-Type': 'application/json',
-      Authorization: PIPELINE_KEY,
     },
     body: JSON.stringify(body),
     signal,
   })
 
   if (!res.ok) {
-    throw new Error(`Pipeline API ${res.status}: ${res.statusText}`)
+    const errorText = await res.text().catch(() => '')
+    const detail = extractErrorMessage(errorText)
+    throw new Error(detail || `Pipeline API ${res.status}: ${res.statusText}`)
   }
 
   const data: PipelineResponse = await res.json()

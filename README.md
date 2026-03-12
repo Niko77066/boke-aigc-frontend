@@ -65,10 +65,26 @@ npm run lint
 - 当前值应与线上 Sealos Deployment 名一致，例如 `boke-aigc-frontend-web`
 - `Variable: SEALOS_NAMESPACE`
 - 例如 `ns-vd309f0o`
+- `Variable: SEALOS_HOST`
+- 例如 `boke-aigc.example.com`；如果你们已经有固定域名，填线上访问域名
 - `Variable: VITE_API_BASE_URL`
 - 例如 `https://api.example.com`
+- `Variable: VITE_CAPCUT_API_BASE_URL`
+- 例如 `https://dddadmin-stg.koxagent.com`
+- `Secret/Env: PIPELINE_AUTHORIZATION`
+- 例如 `Bearer <token>`，由服务端代理注入到工作流请求，不应放进前端 `VITE_` 变量
+- `Secret: VITE_CAPCUT_API_KEY`
+- 剪映接口鉴权 key；如果当前环境不要求，可以留空
 - `Secret: SEALOS_KUBECONFIG`
 - 值为 Sealos 集群 kubeconfig 原文
+
+推荐按这个顺序配置：
+
+1. 在本地创建 `.env.local`，写入 `PIPELINE_AUTHORIZATION='Bearer <token>'`，用 `npm run dev` 验证工作流生成。
+2. 在 GitHub `production` environment 中配置 `PIPELINE_AUTHORIZATION`、`SEALOS_KUBECONFIG`、`VITE_CAPCUT_API_KEY` 三个 Secret。
+3. 在 GitHub repository variables 中配置 `SEALOS_APP_NAME`、`SEALOS_NAMESPACE`、`SEALOS_HOST`、`VITE_API_BASE_URL`、`VITE_CAPCUT_API_BASE_URL`。
+4. 手动触发 `.github/workflows/sealos-cd.yml` 或推送到 `main/master`。
+5. 部署完成后，确认前端请求命中同源 `/api/pipeline/v1/chat/completions`，而不是外部域名。
 
 安全建议：
 

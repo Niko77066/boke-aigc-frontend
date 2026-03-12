@@ -144,6 +144,7 @@ jobs:
       API_BASE_URL: ${{ needs.build.outputs.api_base_url }}
       CAPCUT_API_BASE_URL: ${{ needs.build.outputs.capcut_api_base_url }}
       CAPCUT_API_KEY: ${{ secrets.VITE_CAPCUT_API_KEY }}
+      PIPELINE_AUTHORIZATION: ${{ secrets.PIPELINE_AUTHORIZATION }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -194,5 +195,6 @@ jobs:
           kubectl set env deployment/"${APP_NAME}" VITE_API_BASE_URL="${API_BASE_URL}" -n "${NAMESPACE}"
           kubectl set env deployment/"${APP_NAME}" VITE_CAPCUT_API_BASE_URL="${CAPCUT_API_BASE_URL}" -n "${NAMESPACE}"
           kubectl set env deployment/"${APP_NAME}" VITE_CAPCUT_API_KEY="${CAPCUT_API_KEY}" -n "${NAMESPACE}"
+          kubectl set env deployment/"${APP_NAME}" PIPELINE_AUTHORIZATION="${PIPELINE_AUTHORIZATION}" -n "${NAMESPACE}"
           kubectl annotate deployment/"${APP_NAME}" originImageName="${IMAGE_REF}" -n "${NAMESPACE}" --overwrite
           kubectl rollout status deployment/"${APP_NAME}" -n "${NAMESPACE}" --timeout=180s

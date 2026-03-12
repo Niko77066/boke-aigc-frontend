@@ -59,8 +59,9 @@ Niko 不喜欢聊天式交互，要求用 **原来的表单模式** 对接 Pipel
 - `src/types/index.ts` — 可能需要扩展 TaskConfig 类型
 
 ## Pipeline API 参考
-- URL: `https://ai.blue-converse.com/api/v1/chat/completions`
-- Key: `Bearer converse-yZLNsh2BGTWNL65KHFAmry3R2wGGCcs4vBWl2WOtPBzg8bnIUocHvjlxcAIN`
+- Browser URL: `/api/pipeline/v1/chat/completions`
+- Upstream URL: `https://ai.blue-converse.com/api/v1/chat/completions`
+- Auth: 由服务端代理通过 `PIPELINE_AUTHORIZATION` 注入，不应在前端代码或文档中保存明文 token
 - Variables: `{ mode: "文案"|"视频", copy?: string, voice?: string, text?: string }`
 - Voice options: 活力男声 / 专业男声 / 甜美女声 / 沉稳女声
 - Subtitle options: 大字报 / 极简黑底 / 综艺花字
