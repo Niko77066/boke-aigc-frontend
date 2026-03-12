@@ -5,6 +5,15 @@ import { assetApi, externalApi } from '@/api'
 import type { UploadVideoOptions, UploadStatusResponse, VideoStatus } from '@/api/external'
 import { hasApiBaseUrl } from '@/config/runtime'
 
+const VIDEO_STAGE_PROGRESS: Record<VideoStatus['state'], number> = {
+  pending: 5,
+  uploading: 25,
+  analyzing: 65,
+  uploading_kb: 90,
+  completed: 100,
+  failed: 100,
+}
+
 export const useAssetStore = defineStore('asset', () => {
   const assets = ref<Asset[]>([])
   const loading = ref(false)
@@ -52,6 +61,75 @@ export const useAssetStore = defineStore('asset', () => {
   const uploadingAssets = computed(() => assets.value.filter((a) => a.status === 'uploading' || a.status === 'processing'))
 
   const taggedAssets = computed(() => assets.value.filter((a) => a.tags.length > 0))
+
+  const statusCounts = computed(() => {
+    const counts: Record<VideoStatus['state'], number> = {
+      pending: 0,
+      uploading: 0,
+      analyzing: 0,
+      uploading_kb: 0,
+      completed: 0,
+      failed: 0,
+    }
+
+    for (const video of videoStatuses.value) {
+      counts[video.state] += 1
+    }
+
+    return counts
+  })
+
+  const uploadProgressPercent = computed(() => {
+    if (uploadState.value === 'completed' || uploadState.value === 'partial_failed') {
+      return 100
+    }
+
+    if (uploadState.value === 'uploading') {
+      return uploadProgress.value
+    }
+
+    if (videoStatuses.value.length > 0) {
+      const total = videoStatuses.value.reduce((sum, video) => sum + VIDEO_STAGE_PROGRESS[video.state], 0)
+      return Math.round(total / videoStatuses.value.length)
+    }
+
+    if (totalVideoCount.value > 0) {
+      return Math.round((processedCount.value / totalVideoCount.value) * 100)
+    }
+
+    return 0
+  })
+
+  const activeVideoStatus = computed(() => {
+    return videoStatuses.value.find((video) => video.state !== 'completed' && video.state !== 'failed') ?? null
+  })
+
+  const currentStageLabel = computed(() => {
+    if (uploadState.value === 'uploading') return '素材上传中'
+    if (activeVideoStatus.value?.state === 'uploading') return '源文件上传中'
+    if (activeVideoStatus.value?.state === 'analyzing') return 'AI 分析中'
+    if (activeVideoStatus.value?.state === 'uploading_kb') return '回传知识库中'
+    if (uploadState.value === 'completed') return '素材生成完成'
+    if (uploadState.value === 'partial_failed') return '部分素材生成失败'
+    if (uploadState.value === 'error') return '素材生成异常'
+    return '等待任务开始'
+  })
+
+  const currentStatusSummary = computed(() => {
+    if (activeVideoStatus.value) {
+      return `${activeVideoStatus.value.file_name} · ${activeVideoStatus.value.state}`
+    }
+    if (uploadState.value === 'completed') {
+      return `已完成 ${processedCount.value} / ${totalVideoCount.value || processedCount.value} 个素材`
+    }
+    if (uploadState.value === 'partial_failed') {
+      return `成功 ${statusCounts.value.completed} 个，失败 ${statusCounts.value.failed} 个`
+    }
+    if (uploadError.value) {
+      return uploadError.value
+    }
+    return '等待服务端返回处理状态'
+  })
 
   async function fetchAssets() {
     loading.value = true
@@ -286,6 +364,11 @@ export const useAssetStore = defineStore('asset', () => {
     assetById,
     uploadingAssets,
     taggedAssets,
+    statusCounts,
+    uploadProgressPercent,
+    activeVideoStatus,
+    currentStageLabel,
+    currentStatusSummary,
     fetchAssets,
     uploadFiles,
     uploadVideos,

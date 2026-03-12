@@ -4,6 +4,7 @@ import { useAssetStore } from '@/stores/asset'
 import FileUploader from '@/components/upload/FileUploader.vue'
 import AssetCard from '@/components/upload/AssetCard.vue'
 import TagInput from '@/components/common/TagInput.vue'
+import ProgressBar from '@/components/render/ProgressBar.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, FolderOpen, Upload, Loader2, CheckCircle, XCircle } from 'lucide-vue-next'
 import type { UploadVideoOptions } from '@/api/external'
@@ -47,6 +48,32 @@ const displayedAssets = computed(() => {
 })
 
 const processingAssets = computed(() => assetStore.assets.filter((a) => a.status === 'processing'))
+const progressStats = computed(() => [
+  {
+    label: '等待中',
+    value: assetStore.statusCounts.pending,
+    tone: 'text-slate-500',
+    bg: 'bg-slate-100',
+  },
+  {
+    label: '处理中',
+    value: assetStore.statusCounts.uploading + assetStore.statusCounts.analyzing + assetStore.statusCounts.uploading_kb,
+    tone: 'text-blue-600',
+    bg: 'bg-blue-50',
+  },
+  {
+    label: '已完成',
+    value: assetStore.statusCounts.completed,
+    tone: 'text-emerald-600',
+    bg: 'bg-emerald-50',
+  },
+  {
+    label: '失败',
+    value: assetStore.statusCounts.failed,
+    tone: 'text-red-500',
+    bg: 'bg-red-50',
+  },
+])
 
 // 状态中文映射
 const videoStateLabel: Record<string, string> = {
@@ -238,46 +265,90 @@ async function saveTags() {
       </div>
 
       <!-- 上传/处理状态 -->
-      <div
+        <div
         v-if="assetStore.uploadState !== 'idle'"
         class="upload-status rounded-lg p-4 mt-3"
       >
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-sm font-medium" :class="{
+        <div class="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <span class="text-sm font-medium" :class="{
             'text-blue-500': assetStore.uploadState === 'processing',
             'text-emerald-600': assetStore.uploadState === 'completed',
             'text-amber-500': assetStore.uploadState === 'partial_failed',
             'text-red-500': assetStore.uploadState === 'error',
             'text-purple-600': assetStore.uploadState === 'uploading',
           }">
-            <Loader2 v-if="assetStore.uploadState === 'processing' || assetStore.uploadState === 'uploading'" :size="16" class="animate-spin mr-1 inline-block align-text-bottom" />
-            <CheckCircle v-else-if="assetStore.uploadState === 'completed'" :size="16" class="mr-1 inline-block align-text-bottom" />
-            <XCircle v-else-if="assetStore.uploadState === 'error' || assetStore.uploadState === 'partial_failed'" :size="16" class="mr-1 inline-block align-text-bottom" />
-            {{ uploadStateLabel }}
-          </span>
-          <span v-if="assetStore.totalVideoCount > 0" class="text-xs text-gray-500">
-            {{ assetStore.processedCount }} / {{ assetStore.totalVideoCount }} 个视频
-          </span>
+              <Loader2 v-if="assetStore.uploadState === 'processing' || assetStore.uploadState === 'uploading'" :size="16" class="animate-spin mr-1 inline-block align-text-bottom" />
+              <CheckCircle v-else-if="assetStore.uploadState === 'completed'" :size="16" class="mr-1 inline-block align-text-bottom" />
+              <XCircle v-else-if="assetStore.uploadState === 'error' || assetStore.uploadState === 'partial_failed'" :size="16" class="mr-1 inline-block align-text-bottom" />
+              素材生成实时监控
+            </span>
+            <div class="text-lg font-semibold text-gray-900 mt-1">{{ assetStore.currentStageLabel }}</div>
+            <div class="text-xs text-gray-500 mt-1">
+              {{ uploadStateLabel }}
+              <span v-if="assetStore.totalVideoCount > 0"> · {{ assetStore.processedCount }} / {{ assetStore.totalVideoCount }} 个视频</span>
+            </div>
+          </div>
+          <div class="text-right shrink-0">
+            <div class="text-2xl font-semibold text-gray-900">{{ assetStore.uploadProgressPercent }}%</div>
+            <div class="text-xs text-gray-400">当前总进度</div>
+          </div>
         </div>
-        <el-progress
-          v-if="assetStore.uploadState === 'processing'"
-          :percentage="assetStore.totalVideoCount > 0 ? Math.round((assetStore.processedCount / assetStore.totalVideoCount) * 100) : 0"
-          :stroke-width="6"
-          color="#7C5CFC"
+
+        <ProgressBar
+          :progress="assetStore.uploadProgressPercent"
+          :show-percentage="false"
+          color="linear-gradient(90deg, #7C5CFC 0%, #14B8A6 100%)"
         />
+
+        <div class="monitor-meta mt-4">
+          <div class="current-task-card">
+            <div class="text-xs uppercase tracking-[0.16em] text-gray-400">当前处理素材</div>
+            <div class="text-sm font-semibold text-gray-800 mt-2">
+              {{ assetStore.activeVideoStatus?.file_name ?? '当前批次已无进行中素材' }}
+            </div>
+            <div class="text-xs text-gray-500 mt-1">
+              {{
+                assetStore.activeVideoStatus
+                  ? (videoStateLabel[assetStore.activeVideoStatus.state] ?? assetStore.activeVideoStatus.state)
+                  : assetStore.currentStatusSummary
+              }}
+            </div>
+          </div>
+          <div class="stats-grid">
+            <div
+              v-for="stat in progressStats"
+              :key="stat.label"
+              class="stat-chip"
+              :class="stat.bg"
+            >
+              <div class="text-xs text-gray-500">{{ stat.label }}</div>
+              <div class="text-lg font-semibold" :class="stat.tone">{{ stat.value }}</div>
+            </div>
+          </div>
+        </div>
+
         <!-- 各视频状态明细 -->
         <div v-if="assetStore.videoStatuses.length > 0" class="video-status-list mt-3 space-y-1">
           <div
             v-for="v in assetStore.videoStatuses"
             :key="v.file_name"
-            class="flex items-center justify-between text-xs py-1 px-2 rounded"
+            class="video-status-row"
             :class="{
               'bg-emerald-50': v.state === 'completed',
               'bg-red-50': v.state === 'failed',
               'bg-gray-50': v.state !== 'completed' && v.state !== 'failed',
             }"
           >
-            <span class="text-gray-700 truncate max-w-[60%]">{{ v.file_name }}</span>
+            <div class="min-w-0 flex-1 pr-3">
+              <div class="text-gray-700 truncate">{{ v.file_name }}</div>
+              <div class="mini-progress-track mt-2">
+                <div
+                  class="mini-progress-bar"
+                  :style="{ width: `${v.state === 'pending' ? 5 : v.state === 'uploading' ? 25 : v.state === 'analyzing' ? 65 : v.state === 'uploading_kb' ? 90 : 100}%` }"
+                ></div>
+              </div>
+            </div>
             <span :class="{
               'text-emerald-600': v.state === 'completed',
               'text-red-500': v.state === 'failed',
@@ -410,6 +481,36 @@ async function saveTags() {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+.monitor-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.current-task-card,
+.stat-chip {
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  background: #F8F7F4;
+  padding: 12px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.video-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
 .video-status-list > div {
   border: 1px solid transparent;
   border-radius: 8px;
@@ -419,6 +520,21 @@ async function saveTags() {
 .video-status-list > div:hover {
   background-color: #F8F7F4;
   border-color: #E5E7EB;
+}
+
+.mini-progress-track {
+  width: 100%;
+  height: 6px;
+  background: #E5E7EB;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.mini-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7C5CFC 0%, #14B8A6 100%);
+  transition: width 0.3s ease;
 }
 
 /* Grid */
@@ -458,6 +574,16 @@ async function saveTags() {
 .fade-slide-enter-from, .fade-slide-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+@media (max-width: 768px) {
+  .monitor-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Element Plus Overrides - Light theme */
