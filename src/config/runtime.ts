@@ -1,3 +1,5 @@
+const DEFAULT_CAPCUT_API_BASE_URL = 'https://dddadmin-stg.koxagent.com'
+
 function normalizeUrl(value?: string): string {
   return (value || '').trim().replace(/\/$/, '')
 }
@@ -11,7 +13,11 @@ export function hasApiBaseUrl(): boolean {
 }
 
 export function getCapcutApiBaseUrl(): string {
-  return normalizeUrl(window.__APP_CONFIG__?.VITE_CAPCUT_API_BASE_URL || import.meta.env.VITE_CAPCUT_API_BASE_URL)
+  return normalizeUrl(
+    window.__APP_CONFIG__?.VITE_CAPCUT_API_BASE_URL
+      || import.meta.env.VITE_CAPCUT_API_BASE_URL
+      || DEFAULT_CAPCUT_API_BASE_URL,
+  )
 }
 
 export function getCapcutApiKey(): string {

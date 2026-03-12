@@ -132,7 +132,10 @@ let requestId = 1
 
 function buildCapcutApiUrl(path: string): string {
   const baseUrl = getCapcutApiBaseUrl()
-  return `${baseUrl}${path}`
+  if (import.meta.env.DEV) {
+    return `${baseUrl}${path}`
+  }
+  return path
 }
 
 function getCapcutApiHeaders(includeJson: boolean = true): Record<string, string> {
